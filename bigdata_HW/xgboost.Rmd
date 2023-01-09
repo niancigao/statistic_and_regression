@@ -1,0 +1,360 @@
+---
+title: "Untitled"
+author: "B082040005 高念慈"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r results='hide', message=FALSE, warning=FALSE, echo=F}
+pacman::p_load(data.table,dplyr,tidyr,stringr,ggplot2,plotly,lubridate,vcd,gridExtra,
+               car,readr, sf, tmap,highcharter,RColorBrewer,magrittr,knitr,fastDummies)
+pacman::p_load(MatchIt,stargazer,cobalt,eatATA)
+pacman::p_load(quantreg)
+library("MatchIt","stargazer")
+library("quantreg")
+pals16 = c(brewer.pal(9,"Set1"),brewer.pal(8,"Set1")[1:4])
+library(readxl)
+library("eatATA")
+library(caret)
+library(corrplot)
+
+if (!require("pacman")) install.packages("pacman")
+pacman::p_load(pscl, ROCR, methods, Matrix)
+
+##### 載入套件 #####
+pacman::p_load(data.table, dplyr, tidyr, stringr, ggplot2, plotly, lubridate, vcd, gridExtra,
+               car, readr, sf, tmap, highcharter, RColorBrewer, magrittr, knitr, fastDummies, 
+               psych, tidyverse, viridis, geosphere, MatchIt, stargazer, cobalt, eatATA, quantreg)
+library("MatchIt","stargazer")
+library("quantreg")
+library("eatATA")
+library(caret)
+library(corrplot)
+library(readxl)
+library(readr)
+library(data.table)
+library(dplyr)
+library(geosphere)
+pals17 = c(brewer.pal(9,"GnBu"), rev(brewer.pal(8,"YlGnBu")),rev(brewer.pal(9,"PuBu")))
+
+
+```
+
+```{r include=FALSE}
+
+KH = fread("C:/Users/user/Desktop/bigdata_HW/期中期末/Group12/Dataset/KH(7).csv", encoding = 'UTF-8', header = T)
+#KHprice_temple
+
+```
+
+```{r }
+# str(df)
+dat = KH[,-c("Transfer_area_land","Transfer_area_building")]
+colnames(dat)
+```
+
+---
+
+### 資料
+
++ 目標變數 : "Price_total"，交易總價(萬)
+
+### 主要關心變數
+
++ "temple_distant" 
+
++ "temple_distant_200"             
++ "temple_distant_350"            
++ "temple_distant_500"            
+
+
+### 切資料
+
+```{r}
+
+# Split dataset training (70%) and testing (30%) 
+
+set.seed(1)
+train_idx <- sample(1:nrow(dat), nrow(dat) * 0.7)
+train <- dat[train_idx, ]
+test <-  dat[setdiff(1:nrow(dat), train_idx),] 
+
+train_y = train[, c("Price_total")] 
+test_y = test[ , c("Price_total")]
+
+```
+
+```{r}
+
+train[, c("Price_total")] = (log(train[, c("Price_total")])) 
+test[, c("Price_total")] = (log(test[ , c("Price_total")]))
+
+train = train[is.finite(train$Price_total),] # 去掉 inf NA NAN
+test = test[is.finite(test$Price_total),] # 去掉 inf NA NAN
+
+train_y = train[, c("Price_total")] 
+test_y = test[ , c("Price_total")]
+
+```
+
+### model
+
+```{r}
+# install.packages("xgboost")
+library(xgboost)
+```
+
+
+使用 5-fold ，學習率 0.1 ，訓練 100 顆數，找出最適驗證集或測試集顆數
+
++ subsample = bag.fraction參數
++ nfold: 將投入的data參數值（在此處為訓練資料集），隨機切割(partition)為n等分的子樣本
++ eta: learning rate,學習步伐(default為0.3)
++ nrounds: 模型所使用的樹個數(迭代數)
++ nthread = 2：我們將要使用的 CPU 線程數
+
+```{r}
+
+starttime =  now()
+
+model_gbm <- xgboost(data = as.matrix(train[,c(1:8,10:59)]),
+                     label = (as.matrix(train[,c(9)])),
+                     max.depth = 6,
+                     eta = 0.1, 
+                     nthread = 2,
+                     nfold = 5,
+                     nrounds = 100,
+                     subsample = 0.6,                        
+                     objective = "reg:linear",
+                     verbose = 0)
+
+endtime = now()
+
+print(endtime - starttime)
+
+```
+
+
+```{r}
+print(model_gbm)
+
+```
+
+
+### 預測
+
+```{r}
+pred_y = predict(model_gbm, newdata = as.matrix(test[,c(1:8,10:59)]))
+
+#########################
+
+train_pred_y = predict(model_gbm, as.matrix(train[,c(1:8,10:59)]))
+
+```
+
+
+```{r}
+
+RSQUARE = function(y_actual,y_predict){
+  cor(y_actual,y_predict)^2
+}
+
+a = RSQUARE(unlist((test_y)) , pred_y)
+cat('The R-square of the test data is ', round(a,3), '\n')
+
+b = RSQUARE(unlist((train_y)) , train_pred_y)
+cat('The R-square of the train data is ', round(b,3), '\n')
+
+```
+
++ The root mean square error of the test data is  0.398 
++ The R-square of the test data is  0.785 
++ The root mean square error of the train data is  0.398 
++ The R-square of the train data is  0.835  
+
+```{r}
+
+residuals = (test_y) - pred_y
+RMSE = sqrt(mean(unlist(residuals^2)))
+cat('The root mean square error of the test data is ', round(RMSE,3),'\n')
+
+y_test_mean = mean(unlist((test_y)))
+# Calculate total sum of squares
+tss =  sum((unlist((test_y)) - y_test_mean)^2 )
+# Calculate residual sum of squares
+rss =  sum(residuals^2)
+# Calculate R-squared
+rsq  =  1 - (rss/tss)
+cat('The R-square of the test data is ', round(rsq,3), '\n')
+
+##############################################
+
+train_residuals = (train_y) - train_pred_y
+train_RMSE = sqrt(mean(unlist(train_residuals^2)))
+cat('The root mean square error of the train data is ', round(RMSE,3),'\n')
+
+y_train_mean = mean(unlist((train_y)))
+# Calculate total sum of squares
+tss =  sum((unlist((train_y)) - y_train_mean)^2 )
+# Calculate residual sum of squares
+rss =  sum(train_residuals^2)
+# Calculate R-squared
+rsq  =  1 - (rss/tss)
+cat('The R-square of the train data is ', round(rsq,3), '\n')
+
+```
+
++ 22. temple_distant	0.0100343929
+
++ 45. temple_distant_500	0.0002115829
++ 49. temple_distant_350	0.0001322594
++ 50後 temple_distant_200
+
+```{r}
+importance_matrix <- xgb.importance(model = model_gbm)
+print(importance_matrix)
+xgb.plot.importance(importance_matrix = importance_matrix)
+```
+
++ https://blog.csdn.net/langyichao1/article/details/70175715
+
+
++ 變數重要性圖
+
+```{r}
+# install.packages('vip')
+vip::vip(model_gbm)
+```
+
++ 大概25棵就收斂了
+
+```{r}
+# plot error vs number trees
+ggplot(model_gbm$evaluation_log) +
+  geom_line(aes(iter, train_rmse), color = "red") 
+
+#+
+  geom_line(aes(iter, test_rmse_mean), color = "blue")
+```
+
+### 刪變數取重要性 前30
+
+```{r}
+
+# importance_matrix$Feature
+
+train = train[,c("Build_YMD", "Pattern_room", "Pattern_bath", "Building_age",
+                 "Floor_transfer", "distance_LRT", "Type_building_with_PS", "Build_Y",
+                 "TtFloor", "Building_Suit", "Parking_space_total_area", "Building_Others",
+                 "Location_Income", "X", "Building_Apt_general", "distance_interchange",
+                 "Pattern_hall", "distance_train", "Location_TownID", "Type_building_without_PS",
+                 "Y", "temple_distant", "distance_airport", "distance_factory", "Type_parking_space",
+                 "Build_YM", "Pattern_non", "TradeYMD", "Using_type_B", "MRTin500", "Price_total")]
+
+
+test = test[,c("Build_YMD", "Pattern_room", "Pattern_bath", "Building_age",
+                 "Floor_transfer", "distance_LRT", "Type_building_with_PS", "Build_Y",
+                 "TtFloor", "Building_Suit", "Parking_space_total_area", "Building_Others",
+                 "Location_Income", "X", "Building_Apt_general", "distance_interchange",
+                 "Pattern_hall", "distance_train", "Location_TownID", "Type_building_without_PS",
+                 "Y", "temple_distant", "distance_airport", "distance_factory", "Type_parking_space",
+                 "Build_YM", "Pattern_non", "TradeYMD", "Using_type_B", "MRTin500", "Price_total")]
+
+
+```
+
+## 調參
+
++ eta : 控制學習步伐
++ max_depth: 樹的深度
++ min_child_weight: 末梢節點的最小觀測值個數
++ subsample: 每棵樹模型所抽樣訓練資料集的比例
++ colsample_bytrees: 每棵樹模型所抽樣的欄位數目
+
+
+```{r}
+
+model_gbm <- xgboost(data = as.matrix(train[,c(1:30)]),
+                     label = (as.matrix(train[,c(31)])),
+                     max.depth = 6,
+                     eta = 0.01, 
+                     nthread = 2,
+                     nfold = 5,
+                     nrounds = 1000,
+                     subsample = 0.6,                        
+                     objective = "reg:linear",
+                     verbose = 0)
+
+
+```
+
+### 預測
+
+```{r}
+
+pred_y = predict(model_gbm, newdata = as.matrix(test[,c(1:30)]))
+
+#########################
+
+train_pred_y = predict(model_gbm, as.matrix(train[,c(1:30)]))
+
+```
+
++ The root mean square error of the test data is  0.398 
++ The R-square of the test data is  0.785 
++ The root mean square error of the train data is  0.398 
++ The R-square of the train data is  0.835 
+
++ The root mean square error of the test data is  0.395 
++ The R-square of the test data is  0.788 
++ The root mean square error of the train data is  0.395 
++ The R-square of the train data is  0.839 
+
+```{r}
+residuals = (test_y) - pred_y
+RMSE = sqrt(mean(unlist(residuals^2)))
+cat('The root mean square error of the test data is ', round(RMSE,3),'\n')
+
+y_test_mean = mean(unlist((test_y)))
+# Calculate total sum of squares
+tss =  sum((unlist((test_y)) - y_test_mean)^2 )
+# Calculate residual sum of squares
+rss =  sum(residuals^2)
+# Calculate R-squared
+rsq  =  1 - (rss/tss)
+cat('The R-square of the test data is ', round(rsq,3), '\n')
+
+##############################################
+
+train_residuals = (train_y) - train_pred_y
+train_RMSE = sqrt(mean(unlist(train_residuals^2)))
+cat('The root mean square error of the train data is ', round(RMSE,3),'\n')
+
+y_train_mean = mean(unlist((train_y)))
+# Calculate total sum of squares
+tss =  sum((unlist((train_y)) - y_train_mean)^2 )
+# Calculate residual sum of squares
+rss =  sum(train_residuals^2)
+# Calculate R-squared
+rsq  =  1 - (rss/tss)
+cat('The R-square of the train data is ', round(rsq,3), '\n')
+
+```
+
+```{r}
+# plot error vs number trees
+ggplot(model_gbm$evaluation_log) +
+  geom_line(aes(iter, train_rmse), color = "red") 
+
+#+
+  geom_line(aes(iter, test_rmse_mean), color = "blue")
+```
+
+```{r}
+importance_matrix <- xgb.importance(model = model_gbm)
+print(importance_matrix)
+xgb.plot.importance(importance_matrix = importance_matrix)
+```
+
+
+----

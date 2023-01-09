@@ -1,0 +1,173 @@
+---
+title: "隨機森林_選重要參數_V3"
+author: "黃建華"
+date: "12/26/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+
+## R Markdown
+```{r}
+##### 載入套件 #####
+pacman::p_load(data.table, dplyr, tidyr, stringr, ggplot2, plotly, lubridate, vcd, gridExtra,
+               car, readr, sf, tmap, highcharter, RColorBrewer, magrittr, knitr, fastDummies, 
+               psych, tidyverse, viridis, geosphere, MatchIt, stargazer, cobalt, eatATA, quantreg)
+library("MatchIt","stargazer")
+library("quantreg")
+library("eatATA")
+library(caret)
+library(corrplot)
+library(readxl)
+library(readr)
+library(data.table)
+library(dplyr)
+library(geosphere)
+pals17 = c(brewer.pal(9,"GnBu"), rev(brewer.pal(8,"YlGnBu")),rev(brewer.pal(9,"PuBu")))
+
+
+
+```
+
+
+
+```{r}
+KH <- read_excel("C:/Users/user/Desktop/bigdata_HW/期中期末/Group12/Dataset/KH_45variables.xlsx")
+temple <- read_csv("C:/Users/user/Desktop/bigdata_HW/期中期末/Group12/Dataset/高雄市寺廟基本資料.csv")
+
+
+```
+
+
+```{r}
+##### 資料概述 #####
+dim(KH)
+names(KH)
+str(KH)
+str(temple)
+
+```
+
+
+
+```{r}
+## 刪除多餘變數
+##KH <- subset(KH , 
+##             select = -c(51:114))
+KH <- data.table(KH)
+```
+
+
+
+
+```{r}
+## 提取房屋、寺廟座標
+KH_location <- data.frame(X = KH$X, Y = KH$Y)
+tp_location_chr <- data.frame(X = temple$Longitude, Y = temple$Latitude)
+tp_location <- as.data.frame(lapply(tp_location_chr, as.numeric))
+
+
+```
+
+
+```{r}
+#KH <- filter(KH,KH$TradeYear %in% c('105','106'))
+KH <- subset(KH,(KH$TradeYear>=105 & KH$TradeYear<=106))
+
+# KH <- KH[,c(-1,-4,-5,-6,-7,-8,-9,-10,-11,-15,-33,-34,-37,-46,-47,-48,-51)]
+
+
+
+
+```
+
+
+
+```{r}
+## 提取房屋、寺廟座標
+KH_location <- data.frame(X = KH$X, Y = KH$Y)
+tp_location_chr <- data.frame(X = temple$Longitude, Y = temple$Latitude)
+tp_location <- as.data.frame(lapply(tp_location_chr, as.numeric))
+
+
+```
+
+
+```{r}
+## 計算房屋和寺廟的最小距離並新增變數temple_distant
+temple_distant <- c()
+dis <- function(x){
+  
+  return(min(distHaversine(x,tp_location[,])))
+}
+
+```
+
+
+```{r}
+temple_distant<- apply(KH_location,1,dis)
+KH$temple_distant <- temple_distant
+summary(KH$temple_distant)
+
+```
+
+
+```{r}
+## 計算高雄區內寺廟密度 Step1: 載入和篩出需要資料
+Land_area = fread("C:/Users/user/Desktop/bigdata_HW/期中期末/Group12/Dataset/population_density.csv", header = T)
+#"C:/Users/user/Desktop/bigdata_HW/期中期末/Group12/Dataset/population_density.csv"
+str(Land_area)
+str(temple)
+Land_area = Land_area[,c(2,4)]
+temple = temple[,c(5)]
+
+```
+
+
+```{r}
+
+
+## 計算高雄區內寺廟密度 Step2: 計算高雄各區面積、寺廟數量
+KH_Land = subset(Land_area[grepl("高雄市" , site_id),])
+KH_ID_area = gsub('高雄市', '', KH_Land$site_id)
+KH_ID_area = data.frame(KH_ID_area)
+KH_area = cbind(KH_ID_area, KH_Land$area)
+
+temple_num = temple %>% group_by(場所區域) %>% summarise(coun = n())
+
+```
+
+
+```{r}
+
+KH$temple_distant_200 <- ifelse(KH$temple_distant<=200,1,0)
+KH$temple_distant_350 <- ifelse(KH$temple_distant>200 & KH$temple_distant<=350,1,0)
+KH$temple_distant_500 <- ifelse(KH$temple_distant>350 & KH$temple_distant<=500,1,0)
+```
+
+
+
+```{r}
+## 計算高雄區內寺廟密度 Step3: 得出高雄各區寺廟密度
+density = merge(KH_area, temple_num, by.x = "KH_ID_area", by.y = "場所區域")
+temple_density = density %>% transmute(density[,1], "各區寺廟密度" = (density[,3]/as.numeric(density[,2])))
+temple_density %>%  arrange(desc(各區寺廟密度)) %>% head()
+
+
+```
+
+
+```{r}
+KH <- KH[,c(-1,-2,-3)] ### 拿掉X 、Y、 TradeYear
+```
+
+```{r}
+colnames(KH)
+```
+
+

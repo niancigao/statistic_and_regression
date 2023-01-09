@@ -1,0 +1,737 @@
+---
+title: "Untitled"
+author: "B082040005 高念慈"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
++ http://uc-r.github.io/gbm_regression
+
+```{r results='hide', message=FALSE, warning=FALSE, echo=F}
+pacman::p_load(data.table,dplyr,tidyr,stringr,ggplot2,plotly,lubridate,vcd,gridExtra,
+               car,readr, sf, tmap,highcharter,RColorBrewer,magrittr,knitr,fastDummies)
+pacman::p_load(MatchIt,stargazer,cobalt,eatATA)
+pacman::p_load(quantreg)
+library("MatchIt","stargazer")
+library("quantreg")
+pals16 = c(brewer.pal(9,"Set1"),brewer.pal(8,"Set1")[1:4])
+library(readxl)
+library("eatATA")
+library(caret)
+library(corrplot)
+
+if (!require("pacman")) install.packages("pacman")
+pacman::p_load(pscl, ROCR, methods, Matrix)
+
+##### 載入套件 #####
+pacman::p_load(data.table, dplyr, tidyr, stringr, ggplot2, plotly, lubridate, vcd, gridExtra,
+               car, readr, sf, tmap, highcharter, RColorBrewer, magrittr, knitr, fastDummies, 
+               psych, tidyverse, viridis, geosphere, MatchIt, stargazer, cobalt, eatATA, quantreg)
+library("MatchIt","stargazer")
+library("quantreg")
+library("eatATA")
+library(caret)
+library(corrplot)
+library(readxl)
+library(readr)
+library(data.table)
+library(dplyr)
+library(geosphere)
+pals17 = c(brewer.pal(9,"GnBu"), rev(brewer.pal(8,"YlGnBu")),rev(brewer.pal(9,"PuBu")))
+
+
+```
+
+
+```{r include=FALSE}
+
+KH = fread("C:/Users/user/Desktop/bigdata_HW/期中期末/Group12/Dataset/KHprice_temple.csv", encoding = 'UTF-8', header = T)
+#KHprice_temple
+
+```
+
++ 只抓取 104-105 年，減少資料量/房價變化才不會特別劇烈
+
+```{r}
+KH <- filter(KH,KH$TradeYear %in% c(104,105))
+```
+
+```{r}
+colnames(KH)[16] <- c("Type_parking_space")
+colnames(KH)[18] <- c("Type_building_without_PS")
+colnames(KH)[19] <- c("Type_building_with_PS")
+colnames(KH)[20] <- c("Type_building_price_inclued_PS")
+colnames(KH)[21] <- c("Parking_space_total_area")
+colnames(KH)[22] <- c("Parking_space_price")
+colnames(KH)[23] <- c("Transfer_area_land")
+colnames(KH)[24] <- c("Transfer_area_building")
+colnames(KH)[25] <- c("Using_type_L")
+colnames(KH)[26] <- c("Using_type_B")
+colnames(KH)[27] <- c("Using_type_Far")
+colnames(KH)[28] <- c("Using_type_Fac")
+colnames(KH)[29] <- c("Using_type_O")
+colnames(KH)[30] <- c("Land_usage_city")
+colnames(KH)[31] <- c("Land_usage_nonecity")
+colnames(KH)[32] <- c("Land_usage_mt_preservation")
+colnames(KH)[38] <- c("Building_Apt_general")
+colnames(KH)[39] <- c("Building_Apt_luxury")
+colnames(KH)[40] <- c("Building_Apt_WS")
+
+```
+
+### 處理分類變量
+```{r}
+# Dummy variable 轉成'Factor'
+dat = KH %>% 
+  mutate(Type_parking_space = factor(Type_parking_space,levels=c(0,1),labels = c('No','Yes')),
+         Type_land = factor(Type_land,levels = c(0,1),labels =c('No','Yes')),
+         Type_building_without_PS = factor(Type_building_without_PS,levels = c(0,1),labels =c('No','Yes')),
+         Type_building_with_PS = factor(Type_building_with_PS,levels = c(0,1),labels =c('No','Yes')),
+         Type_building_price_inclued_PS = factor(Type_building_price_inclued_PS,levels = c(0,1),labels =c('No','Yes')),
+         Using_type_L =  factor(Using_type_L ,levels = c(0,1),labels =c('No','Yes')),
+         Using_type_B =  factor(Using_type_B ,levels = c(0,1),labels =c('No','Yes')),
+         Using_type_Far = factor(Using_type_Far ,levels = c(0,1),labels =c('No','Yes')),
+         Using_type_Fac = factor(Using_type_Fac ,levels = c(0,1),labels =c('No','Yes')),
+         Using_type_O = factor(Using_type_O ,levels = c(0,1),labels =c('No','Yes')),
+         Land_usage_city = factor(Land_usage_city ,levels = c(0,1),labels =c('No','Yes')),
+         Land_usage_nonecity = factor(Land_usage_nonecity ,levels = c(0,1),labels =c('No','Yes')),
+         Land_usage_mt_preservation = factor(Land_usage_mt_preservation ,levels = c(0,1),labels =c('No','Yes')),
+         
+         Building_age_nodata = factor( Building_age_nodata ,levels = c(0,1),labels =c('No','Yes')),
+         Building_Apt_general = factor(Building_Apt_general,levels = c(0,1),labels =c('No','Yes')),
+         Building_Apt_luxury = factor(Building_Apt_luxury,levels = c(0,1),labels =c('No','Yes')),
+         Building_Apt_WS =  factor(Building_Apt_WS,levels = c(0,1),labels =c('No','Yes')),
+         Building_House  =  factor( Building_House,levels = c(0,1),labels =c('No','Yes')),
+         Building_Suit  =  factor( Building_Suit,levels = c(0,1),labels =c('No','Yes')),
+         Building_Others = factor( Building_Others,levels = c(0,1),labels =c('No','Yes'))
+         )
+```
+
+```{r }
+# str(df)
+colnames(dat)
+```
+
+---
+
+### 資料
+
++ 目標變數 : "Price_total"，交易總價(萬)
+
+### 主要關心變數
+
++ "temple_distant" 
+
+#### 刪，避免資訊洩漏 
+
++ "Price_unit"，每平方公尺交易價格(萬) ???
++ "Priceunit_nodata"，無每平方公尺交易價格資料 ???
+
+#### 刪，不重要/重複資訊/模型不能直接跑的變數(chr.)
+
++ "Seq_no-old"
+
++ "Location_Town"
++ "Location_Li"
++ "geometry"
+
+---
+
+#### 剩下資料讓模型自行篩選
+
+```{r}
+
+#dat = dat[,-c("Location_TownIDOld","Price_unit","Priceunit_nodata")]
+
+dat = dat[,-c("Seq_no-old","Location_TownIDOld","Price_unit","Priceunit_nodata","Location_Town","Location_Li","geometry")]
+KH = KH[,-c("Seq_no-old","Location_TownIDOld","Price_unit","Priceunit_nodata","Location_Town","Location_Li","geometry")]
+
+#dat = dat[,-c("房屋類別")]
+
+```
+
+### 切資料/rescale(提高變數解釋性/收斂速度)
+
+最後把目標變數取 log (預設底數 exp ，期中的圖應該也是底數為 exp 的)<br>
+以防模型訓練不出明顯差距<br>
+
+```{r}
+
+# Split dataset training (70%) and testing (30%) 
+
+set.seed(1)
+train_idx <- sample(1:nrow(dat), nrow(dat) * 0.3)
+# test_idx <- sample(1:nrow(dat), nrow(dat) * 0.5)
+train <- dat[train_idx, ]
+test <-  dat[setdiff(1:nrow(dat), train_idx),] 
+test = test[1:9000,]
+
+#train_idx <- sample(1:nrow(dat), nrow(dat) * 0.7)
+#train <- dat[train_idx, ]
+#test <- dat[setdiff(1:nrow(dat), train_idx),] 
+
+# rescale
+
+train_y = train[, c("Price_total")] 
+test_y = test[ , c("Price_total")]
+
+rescale <- preProcess(train[, -c("Price_total")], method = c("center", "scale"))
+# double check with method
+# rescale$method
+scaled_train <- predict(rescale, train[, -c("Price_total")])
+scaled_test <- predict(rescale, test[, -c("Price_total")])
+
+scaled_train[, c("Price_total")] = log(train[, c("Price_total")]) 
+scaled_test[, c("Price_total")] = log(test[ , c("Price_total")])
+
+#scaled_train = scaled_train[,-c("Type_parking_space")]
+#scaled_test = scaled_test[,-c("Type_parking_space")]
+
+```
+
+```{r}
+# write.csv(dat,file = "C:/Users/user/Desktop/bigdata_HW/期中期末/Group12/Dataset/KH(5).csv")
+
+# write.csv(KH,file = "C:/Users/user/Desktop/bigdata_HW/期中期末/Group12/Dataset/KH(6).csv")
+```
+
+```{r include=FALSE}
+
+#scaled_train1 = fread("C:/Users/user/Desktop/bigdata_HW/期中期末/Group12/Dataset/scale_train1.csv", encoding = 'UTF-8', header = T,stringsAsFactors = T)
+
+#scaled_test1 = fread("C:/Users/user/Desktop/bigdata_HW/期中期末/Group12/Dataset/scaled_test1.csv", encoding = 'UTF-8', header = T,stringsAsFactors = T)
+
+# str(scaled_train1)
+# scaled_train1 = scaled_train1[,-"V1"]
+# scaled_test1 = scaled_test1[,-"V1"]
+
+```
+
+### model
+
+```{r}
+# install.packages('gbm')
+library(gbm)
+```
+
+gbm(
++ formula =  formula(data),模型公式(可加offset)
++ distribution = "bernoulli",各種分佈函數都可
+
+“gaussian”（平方誤差）、“laplace”（絕對損失）、“tdist”（t 分佈損失）
+“adaboost”（0-1 結果的 AdaBoost 指數損失）、“bernoulli”（0-1 結果的邏輯回歸）...
+
++ data = list(),不能 NA，dataframe
++ weights,權重
++ var.monotone = NULL,假設預測變量和標籤的關係，（大概是可以減少運算速度吧）
++ n.trees = 100,迭代回歸樹的數量，一般來說先越大越好，然後選擇合適的數目。
++ n.minobsinnode = 10,樹終節點的最小個數
++ shrinkage = 0.001,收縮率，也叫學習速率，一般先設置0.1左右
++ interaction.depth = 1,樹的深度
++ train.fraction = 1.0,train.fraction * nrows(data) 觀察值用於擬合 gbm，其餘部分用於計算損失函數的樣本外估計
++ bag.fraction = 0.5,隨機選擇的訓練集觀察的分數，以提出擴展中的下一棵樹
++ cv.folds=0,交叉驗證的則數，可以用來提取最適的回歸樹數目
++ keep.data = TRUE,一般為TRUE，可以加快速度
++ verbose = "CV",TRUE的話可以反饋結果。
++ class.stratify.cv = NULL,
++ n.cores = NULL)，使用CPU核心的數量
+
+為了減少變數選取我在此先訓練一個大的model<br>
+抓出模型中變數重要性不為 0 的變數或前 30 個變數<br>
+使用 5-fold ，學習率 0.1 ，訓練 200 顆數，找出最適驗證集或測試集顆數
+
+```{r}
+
+starttime =  now()
+
+model_gbm = gbm(scaled_train$Price_total ~.,
+                data = scaled_train,
+                distribution = "gaussian",
+                cv.folds = 5,
+                shrinkage = 0.1,
+                n.minobsinnode = 10,
+                n.trees = 200,
+                interaction.depth = 6,
+                bag.fraction = 0.5,
+                train.fraction = 0.6,
+                keep.data = TRUE,
+                verbose = TRUE)
+
+endtime = now()
+
+print(endtime - starttime)
+difftime(endtime,starttime, units = 'mins')
+
+```
+
++ The best cross-validation iteration was 200.
++ The best test-set iteration was 198.
++ There were 73 predictors of which 51 had non-zero influence.
+
+在這裡有 51 個變數都有非 0 的影響，但資料太大，不同 model 給出的數量不同<br>
+決定超過 30 就用 30 上下做/看重要性結果決定變數做最後的 model
+
+```{r}
+print(model_gbm)
+
+```
+
+```{r}
+# install.packages("png")
+# library(png)
+# filename="C:/Users/user/Desktop/bigdata_HW/期中期末/Group12/Dataset/Rplot%03d.png"
+summary(model_gbm)
+sqrt(min(model_gbm$cv.error)) 
+min(model_gbm$cv.error) 
+```
+
+### 最適回歸樹顆數
+
++ 紅 TEST
++ 綠 VAL
++ 黑 TRAIN
+
+```{r}
+besttree = gbm.perf(model_gbm,
+                    plot.it = TRUE,
+                    oobag.curve = F,
+                    overlay = TRUE,
+                    method="cv")
+
+besttree # 200
+```
+
+```{r}
+besttree = gbm.perf(model_gbm,
+                    plot.it = TRUE,
+                    oobag.curve = F,
+                    overlay = TRUE,
+                    method="test")
+
+besttree # 198
+```
+
+### 預測
+
+```{r}
+pred_y = predict(model_gbm, scaled_test)
+
+#########################
+
+train_pred_y = predict(model_gbm, scaled_train)
+
+
+```
+
+以下皆是取完對數後的結果 : <br>
+
++ train data : 18821 / test data : 9000
+
++ The root mean square error of the test data is  0.46 
++ The R-square of the test data is  0.853 
++ The root mean square error of the train data is  0.46 
++ The R-square of the train data is  0.881  
+
+```{r}
+residuals = log(test_y) - pred_y
+RMSE = sqrt(mean(unlist(residuals^2)))
+cat('The root mean square error of the test data is ', round(RMSE,3),'\n')
+
+y_test_mean = mean(unlist(log(test_y)))
+# Calculate total sum of squares
+tss =  sum((unlist(log(test_y)) - y_test_mean)^2 )
+# Calculate residual sum of squares
+rss =  sum(residuals^2)
+# Calculate R-squared
+rsq  =  1 - (rss/tss)
+cat('The R-square of the test data is ', round(rsq,3), '\n')
+
+##############################################
+
+train_residuals = log(train_y) - train_pred_y
+train_RMSE = sqrt(mean(unlist(train_residuals^2)))
+cat('The root mean square error of the train data is ', round(RMSE,3),'\n')
+
+y_train_mean = mean(unlist(log(train_y)))
+# Calculate total sum of squares
+tss =  sum((unlist(log(train_y)) - y_train_mean)^2 )
+# Calculate residual sum of squares
+rss =  sum(train_residuals^2)
+# Calculate R-squared
+rsq  =  1 - (rss/tss)
+cat('The R-square of the train data is ', round(rsq,3), '\n')
+
+
+```
+
++ 從圖中(測試集結果)可看到模型訓練的不差，紅色為預測，藍色為實際值
+
+```{r}
+# visualize the model, actual and predicted data
+x_ax = 1:length(pred_y)
+plot(x_ax, unlist(log(test_y)), col="blue", pch=20, cex=.9)
+lines(x_ax, pred_y, col="red", pch=20, cex=.9) 
+```
+
++ https://blog.csdn.net/langyichao1/article/details/70175715
+
++ 變數重要性圖
+
+```{r}
+par(mar = c(5, 8, 1, 1))
+# S3 method for class 'gbm'
+summary(
+  model_gbm, # gbm object
+  cBars = 10, # the number of bars to draw. length(object$var.names)
+  plotit = TRUE, # an indicator as to whether the plot is generated.defult TRUE.
+  method = relative.influence, # The function used to compute the relative influence. 亦可使用permutation.test.gbm
+  las = 2
+  )
+```
+
++ 變數重要性圖
+
+```{r}
+# install.packages('vip')
+vip::vip(model_gbm)
+```
+
++ 變數重要性圖(前30)
+
+```{r}
+importance = summary.gbm(model_gbm, plotit=TRUE)
+
+head(importance,35)
+```
+
++ 新資料集 : 34個重要變數 + 目標變數
++ 取重要性有到0.1的變數 --> 取 34 個
+
+**5. 第五重要	temple_distant	0.610674656***
+
++ 開始創造挑選完變數後真的的模型
+
+Transfer_area_building	Transfer_area_building	39.58496554		
+Transfer_area_land	Transfer_area_land	26.27167951		
+distance_LRT	distance_LRT	3.70599992		
+Li_YrSim	Li_YrSim	3.00957035		
+Build_YMD	Build_YMD	2.89170648		
+Land_usage_city	Land_usage_city	2.70259180		
+Location_Income	Location_Income	2.20407855		
+Li_SSSim	Li_SSSim	2.09800388		
+distance_train	distance_train	2.00620483		
+Type_land	Type_land	1.98925294	
+
+Build_YM	Build_YM	1.44521473		
+distance_interchange	distance_interchange	1.34076021		
+Build_Y	Build_Y	1.07443758		
+X	X	0.98317011		
+temple_distant	temple_distant	0.95232413		
+Town_Season	Town_Season	0.91945287		
+Land_usage_mt_preservation	Land_usage_mt_preservation	0.87454821		
+distance_factory	distance_factory	0.71150488		
+Using_type_L	Using_type_L	0.63871508		
+Using_type_Far	Using_type_Far	0.44028584	
+
+TradeYMD	TradeYMD	0.41357373		
+Y	Y	0.40271950		
+Building_age	Building_age	0.38897012		
+distance_airport	distance_airport	0.34272160		
+TtFloor	TtFloor	0.32991186		
+Using_type_O	Using_type_O	0.32768610		
+Using_type_B	Using_type_B	0.30925329		
+Floor_transfer	Floor_transfer	0.23648800		
+NoManageOrg	NoManageOrg	0.22061045		
+Type_building_with_PS	Type_building_with_PS	0.15936354	
+
+Li_Year	Li_Year	0.15385279		
+Floor_complex	Floor_complex	0.13574996		
+Building_Apt_general	Building_Apt_general	0.11758085		
+Building_Others	Building_Others	0.08034920
+
+```{r}
+# head(importance,33)["var"]
+
+
+new_scaled_test = scaled_test[,c("X","Y","Transfer_area_building","Transfer_area_land","Build_YMD",
+                                 "Land_usage_city","temple_distant","TradeYMD","Type_land","Build_YM","Land_usage_mt_preservation",
+                                 "TtFloor","Using_type_L","Building_age","Floor_transfer","Using_type_B","Using_type_O",
+                                 "Building_Apt_general","Using_type_Far","Building_Others","Build_Y","Type_building_with_PS",
+                                 'distance_LRT','distance_train','Li_YrSim','Location_Income','Li_SSSim','distance_interchange',
+                                 'distance_factory','Town_Season', 'distance_airport',"NoManageOrg","Li_Year","Floor_complex","Price_total")]
+              
+new_scaled_train = scaled_train[,c("X","Y","Transfer_area_building","Transfer_area_land","Build_YMD",
+                                 "Land_usage_city","temple_distant","TradeYMD","Type_land","Build_YM","Land_usage_mt_preservation",
+                                 "TtFloor","Using_type_L","Building_age","Floor_transfer","Using_type_B","Using_type_O",
+                                 "Building_Apt_general","Using_type_Far","Building_Others","Build_Y","Type_building_with_PS",
+                                 'distance_LRT','distance_train','Li_YrSim','Location_Income','Li_SSSim','distance_interchange',
+                                 'distance_factory','Town_Season', 'distance_airport',"NoManageOrg","Li_Year","Floor_complex","Price_total")]
+
+
+
+# test_y
+# train_y
+
+```
+
+```{r}
+# write.csv(new_scaled_test,file = "C:/Users/user/Desktop/bigdata_HW/期中期末/Group12/Dataset/new_scaled_test.csv")
+
+# write.csv(new_scaled_train,file = "C:/Users/user/Desktop/bigdata_HW/期中期末/Group12/Dataset/new_scaled_train.csv")
+```
+
+## 最後的模型，因為資料集變小，讓數學習率變小，樹更深，一樣是 5-fold
+
++ shrinkage = 0.05
++ n.trees = 1000
++ cv.folds = 5
+
+```{r}
+
+starttime =  now()
+
+model_gbm = gbm(new_scaled_train$Price_total ~.,
+                data = new_scaled_train,
+                distribution = "gaussian",
+                cv.folds = 5,
+                shrinkage = 0.05,
+                n.minobsinnode = 10,
+                n.trees = 1000,
+                interaction.depth = 6,
+                bag.fraction = 0.7,
+                train.fraction = 0.7,
+                keep.data = TRUE,
+                verbose = TRUE)
+
+endtime = now()
+
+print(endtime - starttime)
+difftime(endtime,starttime, units = 'mins')
+
+```
+
+```{r}
+print(model_gbm)
+```
+
+```{r}
+summary(model_gbm)
+sqrt(min(model_gbm$cv.error)) 
+min(model_gbm$cv.error)
+```
+### 最適回歸樹顆數
+
++ 紅 TEST
++ 綠 VAL
++ 黑 TRAIN
+
+```{r}
+besttree = gbm.perf(model_gbm,
+                    plot.it = TRUE,
+                    oobag.curve = F,
+                    overlay = TRUE,
+                    method="cv")
+
+besttree # 990
+```
+
+```{r}
+besttree = gbm.perf(model_gbm,
+                    plot.it = TRUE,
+                    oobag.curve = F,
+                    overlay = TRUE,
+                    method="test")
+
+besttree # 999
+```
+
+### 預測
+
+```{r}
+pred_y = predict(model_gbm, new_scaled_test)
+
+#########################
+
+train_pred_y = predict(model_gbm, new_scaled_train)
+
+```
+以下皆是取完對數後的結果 : <br>
+
+**Using 999 trees...(樹的最適棵樹)**
+
++ train data : 10453 / test data : 10453
+
++ The root mean square error of the test data is  0.437 
++ The R-square of the test data is  0.868 
++ The root mean square error of the train data is  0.437 
++ The R-square of the train data is  0.909 
+
++ test R^2 : 0.853 上升 0.868
++ train R^2 : 0.881 上升 0.909
++ RMSE 兩者也皆有下降(0.46 --> 0.437)
+
+```{r}
+residuals = log(test_y) - pred_y
+RMSE = sqrt(mean(unlist(residuals^2)))
+cat('The root mean square error of the test data is ', round(RMSE,3),'\n')
+
+y_test_mean = mean(unlist(log(test_y)))
+# Calculate total sum of squares
+tss =  sum((unlist(log(test_y)) - y_test_mean)^2 )
+# Calculate residual sum of squares
+rss =  sum(residuals^2)
+# Calculate R-squared
+rsq  =  1 - (rss/tss)
+cat('The R-square of the test data is ', round(rsq,3), '\n')
+
+##############################################
+
+train_residuals = log(train_y) - train_pred_y
+train_RMSE = sqrt(mean(unlist(train_residuals^2)))
+cat('The root mean square error of the train data is ', round(RMSE,3),'\n')
+
+y_train_mean = mean(unlist(log(train_y)))
+# Calculate total sum of squares
+tss =  sum((unlist(log(train_y)) - y_train_mean)^2 )
+# Calculate residual sum of squares
+rss =  sum(train_residuals^2)
+# Calculate R-squared
+rsq  =  1 - (rss/tss)
+cat('The R-square of the train data is ', round(rsq,3), '\n')
+
+
+```
+
++ 預測的結果其實不錯
+
+```{r}
+# visualize the model, actual and predicted data
+x_ax = 1:length(pred_y)
+plot(x_ax, unlist(log(test_y)), col="blue", pch=20, cex=.9)
+lines(x_ax, pred_y, col="red", pch=20, cex=.9) 
+```
+
++ https://www.projectpro.io/recipes/apply-gradient-boosting-r-for-regression
+
+## 解釋
+
++ 最後模型變數重要性排序
+
+在這個資料集，這個模型中我們的目標<br>
+**14.temple_distant	temple_distant	1.0315475	**<br>
+**(原)15.temple_distant	temple_distant	0.95232413**<br>
+排序第 14 名，能造成將近 1% 的影響<br>
+
+Transfer_area_building	Transfer_area_building	39.7171740		
+Transfer_area_land	Transfer_area_land	25.3331823		
+Build_YMD	Build_YMD	6.2296919		
+distance_LRT	distance_LRT	3.1934556		
+Land_usage_city	Land_usage_city	2.8343826		
+Li_SSSim	Li_SSSim	2.8087025		
+distance_train	distance_train	2.0378383		
+Location_Income	Location_Income	1.9146340		
+Li_YrSim	Li_YrSim	1.8818702		
+Town_Season	Town_Season	1.6427398	
+
+distance_interchange	distance_interchange	1.3252772		
+X	X	1.1628123		
+Type_land	Type_land	1.1514697		
+temple_distant	temple_distant	1.0315475		
+distance_factory	distance_factory	0.8513485		
+Land_usage_mt_preservation	Land_usage_mt_preservation	0.7521100		
+Y	Y	0.6307070		
+Using_type_L	Using_type_L	0.5693446		
+distance_airport	distance_airport	0.5354369		
+Building_age	Building_age	0.5005259	
+
+TradeYMD	TradeYMD	0.4739760		
+TtFloor	TtFloor	0.4602944		
+Build_YM	Build_YM	0.4420232		
+Using_type_O	Using_type_O	0.3851169		
+Floor_transfer	Floor_transfer	0.3781697		
+Using_type_Far	Using_type_Far	0.3706803		
+Using_type_B	Using_type_B	0.3691172		
+NoManageOrg	NoManageOrg	0.2747802		
+Building_Others	Building_Others	0.1986361		
+Build_Y	Build_Y	0.1980771	
+
+Building_Apt_general	Building_Apt_general	0.12791724		
+Floor_complex	Floor_complex	0.10165055		
+Type_building_with_PS	Type_building_with_PS	0.09964161		
+Li_Year	Li_Year	0.01566876
+
+```{r}
+importance = summary.gbm(model_gbm, plotit=FALSE)
+head(importance,34)
+```
+
++ 畫出前 15 名
+
+```{r}
+par(mar = c(5, 8, 1, 1))
+# S3 method for class 'gbm'
+summary(
+    model_gbm, # gbm object
+    cBars = 15, # the number of bars to draw. length(object$var.names)
+    plotit = TRUE, # an indicator as to whether the plot is generated.defult TRUE.
+    method = relative.influence, # The function used to compute the relative influence. 亦可使用permutation.test.gbm
+    las = 2
+)
+```
+
+```{r}
+# install.packages('vip')
+vip::vip(model_gbm)
+```
+
++ https://cloud.tencent.com/developer/article/1058853
+
++ 看前 10 名重要變數 + temple_distant 變動的邊際影響(X軸皆為標準化後尺度)
+
+Transfer_area_building		39.7171740		
+Transfer_area_land		    25.3331823		
+Build_YMD	              	 6.2296919		
+distance_LRT	             3.1934556		
+Land_usage_city	           2.8343826		
+Li_SSSim		               2.8087025		
+distance_train		         2.0378383		
+Location_Income		         1.9146340		
+Li_YrSim		               1.8818702		
+Town_Season		             1.6427398	
+
+temple_distant		         1.0315475	
+
+
+**可以看到在0以下確實有著越近寺廟房價越低(exp(6.05) = 424.113萬)，**
+**越遠離(平均處)房價能上升(exp(6.17) = 478.1861萬)近50萬**
+**距離寺廟3倍標準差處，其實已經算離群值了，為少數，**
+**推測過於遠離寺廟處，人煙稀少房價自然也不高/工業區/高級住宅區等等界有可能**
+
+
+```{r}
+plot.gbm(model_gbm,"temple_distant",besttree)
+
+# 可以看到在0以下確實有著越近寺廟房價越低(exp(6.05) = 424.113萬)，
+# 越遠離(平均處)房價能上升(exp(6.17) = 478.1861萬)近50萬
+
+# 距離寺廟3倍標準差處，其實已經算離群值了，為少數，
+# 推測過於遠離寺廟處，人煙稀少房價自然也不高/工業區/高級住宅區等等界有可能
+
+```
+
+```{r}
+
+plot.gbm(model_gbm,"Transfer_area_building",besttree)
+plot.gbm(model_gbm,"Transfer_area_land",besttree)
+plot.gbm(model_gbm,"distance_LRT",besttree)
+plot.gbm(model_gbm,"Li_SSSim",besttree)
+plot.gbm(model_gbm,"Build_YMD",besttree)
+plot.gbm(model_gbm,"Land_usage_city",besttree)
+plot.gbm(model_gbm,"distance_train",besttree)
+plot.gbm(model_gbm,"Location_Income",besttree)
+plot.gbm(model_gbm,"Li_YrSim",besttree)
+plot.gbm(model_gbm,"Town_Season",besttree)
+
+```
+
+----
