@@ -1,0 +1,619 @@
+---
+高念慈
+B082040005
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+require(pscl)      # zero+poisson
+require(ggplot2)
+
+require(foreign)   
+# 讀取由“Minitab”、“S”、“SAS”、“SPSS”、“Stata”、“Systat”、“Weka”、“dBase”...存儲的數據
+require(MASS)      # NB
+
+```
+
+## 資料
+
++ https://drive.google.com/drive/folders/1jss5EZ9lL1_81R4YrKYculaQ0I4BROms
+
+第三次作業的Dataset還有之前學長的PPT已經上傳在上面的連結，<br>
+請各位同學在治療前中後，分別做4個模型poisson, zero inflated, NB, zero+NB<br>
+第三次作業要做covariates包含age, gender, income
+
+```{r}
+
+df = read.csv("C:/Users/user/Desktop/regression_note/teeth去連結.csv")
+# View(df)
+
+df1 = df[c("age","gender","income","teeth1","teeth2","teeth3","year1","day2","year3")]
+summary(df1)
+
+```
+
+## 治療前資料(刪year1=0)
+
+```{r}
+
+befoedata = subset(df1, select = -c(teeth2,teeth3,day2,year3))
+befoedata = befoedata[befoedata["year1"] != 0,]
+
+```
+
+## 治療中資料(刪day2=0)
+
+```{r}
+
+middata = subset(df1, select = -c(teeth1,teeth3,year1,year3))
+middata = middata[middata["day2"] != 0,]
+
+```
+
+## 治療後資料(刪year3=0)
+
+```{r}
+
+afterdata = subset(df1, select = -c(teeth2,teeth1,day2,year1))
+afterdata = afterdata[afterdata["year3"] != 0,]
+
+```
+
+## 治療前Model (with offset)
+
+```{r}
+
+ggplot(befoedata, aes(teeth1)) +
+  geom_histogram() +
+  scale_x_log10()
+
+```
+
+---
+
+### 1.poisson
+
++ Source: http://rfunction.com/archives/223
+
+```{r}
+head(befoedata)
+```
+
+```{r}
+
+model1 = glm(teeth1 ~ offset(log(year1)) + (age + gender + income), family = poisson, data = befoedata)
+
+summary(model1)
+
+```
+
++ 三個變數(age、gender、income)都有顯著影響
++ age 每增加一單位(歲)，會導致每年平均拔牙顆數的log 增加 0.023389 個單位(顆)
++ gender 每增加一單位，從 0 變 1 (從女生變男生/男生變女生)，會導致每年平均拔牙顆數的log 增加 0.387891 個單位(顆)
++ income 每增加一單位(一個等級)，會導致每年平均拔牙顆數的log 增加 -0.091468 個單位(顆)
++ AIC: 9068.3
+
+##### 泊松回歸的擬合優度偏差檢驗
+
++ https://thestatsgeek.com/2014/04/26/deviance-goodness-of-fit-test-for-poisson-regression/
+
+```{r}
+# overall goodness of fit test for Poisson model
+# pchisq(model1$deviance, df=model1$df.residual, lower.tail=FALSE)
+
+with(model1, cbind(res.deviance = deviance, df = df.residual,
+  p = pchisq(deviance, df.residual, lower.tail=FALSE)))
+
+```
+
+#### 結果
+
+零假設是我們的模型被正確指定，我們有強有力的證據拒絕該假設。<br>
+所以我們有強有力的證據表明我們的模型擬合不佳。<br>
+也許是因為此模型沒考慮 zero inflation。<br>
+
++ 但也許我們只是運氣不好——即使原假設為真，檢驗也有 5% 的機率會被拒絕。
+
+### 2.zero+poisson
+
++ https://stats.oarc.ucla.edu/r/dae/zip/
+
+```{r}
+
+model2 <- zeroinfl(teeth1 ~ offset(log(year1)) + (age + gender + income) | offset(log(year1)) + (age + gender + income), data = befoedata)
+
+summary(model2)
+AIC(model2)
+
+```
+
++ 三個變數(age、gender、income)在 poisson model 都有顯著影響
+
++ age 每增加一單位(歲)，會導致每年平均拔牙顆數的log 增加 0.007957 個單位(顆)
++ gender 每增加一單位，從 0 變 1 (從女生變男生/男生變女生)，會導致每年平均拔牙顆數的log 增加 0.147111 個單位(顆)
++ income 每增加一單位(一個等級)，會導致每年平均拔牙顆數的log 減少 -0.109138 個單位(顆)
+
+---
+
++ 兩個變數(age、gender)顯著影響 Zero-inflation model
+
++ age 每增加一單位(歲)，會導致 logit link with 拔牙顆數為 0 的機率增加 -0.029908  個單位(顆)
++ gender 每增加一單位，從 0 變 1 (從女生變男生/男生變女生)，會導致 logit link with 拔牙顆數為 0 的機率增加 -0.430645 個單位(顆)
++ income 每增加一單位(一個等級)，會導致 logit link with 拔牙顆數為 0 的機率增加 -0.052541 個單位(顆)
+
++ AIC:8075.904
++ Log-likelihood: -4030 on 8 Df
+
+---
+
+Over dispersion:<br><br>
+One of the important assumptions of the Poisson model is equi-dispersion.<br><br>
+That is,<br>
+the mean and variance are equal:<br><br>
+
+One way to solve the over dispersion problem is to use an alternative distribution for count data.<br> 
+Negative Binomial regression model:
+
+### 3.NB
+
++ https://stats.idre.ucla.edu/r/dae/negative-binomial-regression/
+
+```{r}
+
+ggplot(befoedata, aes(teeth1, fill = income)) +
+  geom_histogram(binwidth=1) +
+  facet_grid(income ~ ., margins=TRUE, scales="free")
+
+```
+
+```{r}
+
+ggplot(befoedata, aes(teeth1, fill = gender)) +
+  geom_histogram(binwidth=1) +
+  facet_grid(gender ~ ., margins=TRUE, scales="free")
+
+```
+
+```{r}
+
+with(befoedata, tapply(teeth1, income, function(x) {
+  sprintf("M (SD^2) = %1.2f (%1.2f)", mean(x), (sd(x))^2)
+}))
+
+```
+
+```{r}
+
+with(befoedata, tapply(teeth1, gender, function(x) {
+  sprintf("M (SD^2) = %1.2f (%1.2f)", mean(x), (sd(x))^2)
+}))
+
+```
+
++ 可看到上面變數的變異數都大於平均，使用 poisson 可能會有較大的誤差
+
+```{r}
+
+model3 <- glm.nb(teeth1 ~ offset(log(year1)) + (age + gender + income), data = befoedata)
+
+summary(model3)
+
+```
+
++ 三個變數(age、gender、income)都有顯著影響
++ age 每增加一單位(歲)，會導致每年平均拔牙顆數的log 增加 0.027064 個單位(顆)
++ gender 每增加一單位，從 0 變 1 (從女生變男生/男生變女生)，會導致每年平均拔牙顆數的log 增加 0.436381 個單位(顆)
++ income 每增加一單位(一個等級)，會導致每年平均拔牙顆數的log 增加 -0.095396 個單位(顆)
++ AIC: 7782.7
+
+##### Checking goodness of fit for Poisson regression model
+
+```{r}
+
+X2 <- 2 * (logLik(model1) - logLik(model3))
+X2
+
+pchisq(X2, df = 1, lower.tail=FALSE)
+
+
+```
+
+### 4.zero+NB
+
++ https://www.rdocumentation.org/packages/pscl/versions/1.5.5/topics/zeroinfl
+
+```{r}
+
+model4 <- zeroinfl(teeth1 ~ offset(log(year1)) + (age + gender + income) | offset(log(year1)) + (age + gender + income), data = befoedata, dist = "negbin")
+
+summary(model4)
+AIC(model4)
+
+```
+
++ 主要的三個變數(age、gender、income)在 poisson model 都有顯著影響
+
++ age 每增加一單位(歲)，會導致每年平均拔牙顆數的log 增加 0.011834 個單位(顆)
++ gender 每增加一單位，從 0 變 1 (從女生變男生/男生變女生)，會導致每年平均拔牙顆數的log 增加 0.322695 個單位(顆)
++ income 每增加一單位(一個等級)，會導致每年平均拔牙顆數的log 減少 -0.120912 個單位(顆)
+
+---
+
++ 兩個變數(age、gender)顯著影響 Zero-inflation model
+
++ age 每增加一單位(歲)，會導致 logit link with 拔牙顆數為 0 的機率增加 -0.12302  個單位(顆)
++ gender 每增加一單位，從 0 變 1 (從女生變男生/男生變女生)，會導致 logit link with 拔牙顆數為 0 的機率增加 -0.84159 個單位(顆)
++ income 每增加一單位(一個等級)，會導致 logit link with 拔牙顆數為 0 的機率增加 -0.06978 個單位(顆)
+
++ AIC: 7754.268
++ Log-likelihood: -3868 on 9 Df
+
+---
+
++ https://wangcc.me/LSHTMlearningnote/count-outcomes.html
+
+負二項式分佈迴歸的結果最底下出現的 Theta 部分，它的倒數是個體的隨機效應部分a<br>
+它是關鍵的離散程度參數 (dispersion parameter)
+
+---
+
+### Vuong non-nested hypothesis testing to compare different models
+
+```{r}
+# 基於對兩個不嵌套模型的預測概率的比較
+
+vuong(model1, model2) # 普通泊松 vs 零膨脹泊鬆         AIC: 9068.3/ AIC: 8075.904
+vuong(model3, model4) # 普通負二項式與零膨脹負二項式   AIC: 7782.7/ AIC: 7754.268
+
+# model2: Log-likelihood: -4030 on 8 Df
+# model4: Log-likelihood: -3868 on 9 Df
+
+```
+
+#### 結果
+
++ 第一個結果顯示 普通泊松 < 零膨脹泊鬆(好)
++ 第二個結果顯示 普通負二項式 < 零膨脹負二項式(好)
+
++ 負二項式分佈迴歸的模型更加擬合數據
++ 由 AIC: 9068.3/ AIC: 8075.904/ AIC: 7782.7/ AIC: 7754.268 也能得出 零膨脹負二項式較好
+
+---
+
+以下變數解釋方式皆相同，直接最後模型比較
+
+## 治療中Model(with offset)
+
+```{r}
+
+ggplot(middata, aes(teeth2)) +
+  geom_histogram() +
+  scale_x_log10()
+
+```
+
+---
+
+### 1.poisson
+
+```{r}
+head(middata)
+```
+
+```{r}
+
+model1 = glm(teeth2 ~ offset(log(day2)) + (age + gender + income), family = poisson, data = middata)
+
+summary(model1)
+
+```
+
+##### 泊松回歸的擬合優度偏差檢驗
+
++ https://thestatsgeek.com/2014/04/26/deviance-goodness-of-fit-test-for-poisson-regression/
+
+```{r}
+# overall goodness of fit test for Poisson model
+# pchisq(model1$deviance, df=model1$df.residual, lower.tail=FALSE)
+
+with(model1, cbind(res.deviance = deviance, df = df.residual,
+  p = pchisq(deviance, df.residual, lower.tail=FALSE)))
+
+```
+
+#### 結果
+
+零假設是我們的模型被正確指定，我們有強有力的證據拒絕該假設。<br>
+所以我們有強有力的證據表明我們的模型擬合不佳。<br>
+
++ 但也許我們只是運氣不好——即使原假設為真，檢驗也有 5% 的機率會被拒絕。
+
+### 2.zero+poisson
+
++ https://stats.oarc.ucla.edu/r/dae/zip/
+
+```{r}
+
+model2 <- zeroinfl(teeth2 ~ offset(log(day2)) + (age + gender + income) | offset(log(day2)) + (age + gender + income), data = middata)
+
+summary(model2)
+AIC(model2)
+
+```
+
+---
+
+Over dispersion:<br><br>
+One of the important assumptions of the Poisson model is equi-dispersion.<br><br>
+That is,<br>
+the mean and variance are equal:<br><br>
+
+One way to solve the over dispersion problem is to use an alternative distribution for count data.<br> 
+Negative Binomial regression model:
+
+### 3.NB
+
++ https://stats.idre.ucla.edu/r/dae/negative-binomial-regression/
+
+```{r}
+
+ggplot(middata, aes(teeth2, fill = income)) +
+  geom_histogram(binwidth=1) +
+  facet_grid(income ~ ., margins=TRUE, scales="free")
+
+```
+
+```{r}
+
+ggplot(middata, aes(teeth2, fill = gender)) +
+  geom_histogram(binwidth=1) +
+  facet_grid(gender ~ ., margins=TRUE, scales="free")
+
+```
+
+```{r}
+
+with(middata, tapply(teeth2, income, function(x) {
+  sprintf("M (SD^2) = %1.2f (%1.2f)", mean(x), (sd(x))^2)
+}))
+
+```
+
+```{r}
+
+with(middata, tapply(teeth2, gender, function(x) {
+  sprintf("M (SD^2) = %1.2f (%1.2f)", mean(x), (sd(x))^2)
+}))
+
+```
+
+
+```{r}
+
+model3 <- glm.nb(teeth2 ~ offset(log(day2)) + (age + gender + income), data = middata)
+
+summary(model3)
+
+```
+
+##### Checking goodness of fit for Poisson regression model
+
+```{r}
+
+X2 <- 2 * (logLik(model1) - logLik(model3))
+X2
+
+pchisq(X2, df = 1, lower.tail=FALSE)
+
+
+```
+
+### 4.zero+NB
+
++ https://www.rdocumentation.org/packages/pscl/versions/1.5.5/topics/zeroinfl
+
+```{r}
+
+model4 <- zeroinfl(teeth2 ~ offset(log(day2)) + (age + gender + income) | offset(log(day2)) + (age + gender + income), data = middata, dist = "negbin")
+
+summary(model4)
+AIC(model4)
+
+```
+
+### Vuong non-nested hypothesis testing to compare different models
+
+```{r}
+# 基於對兩個不嵌套模型的預測概率的比較
+
+vuong(model1, model2) # 普通泊松 vs 零膨脹泊鬆         
+vuong(model3, model4) # 普通負二項式與零膨脹負二項式
+
+```
+
+#### 結果
+
++ 第一個結果顯示 普通泊松 < 零膨脹泊鬆(好)
++ 第二個結果顯示 普通負二項式(好) > 零膨脹負二項式
+
++ 負二項式分佈迴歸的模型更加擬合數據
++ 由 AIC: 8030.3/ AIC: 7256.85/ AIC: 6530.7/ AIC: 6538.664 也能得出 普通負二項式較好
++ 推測可能是因為整體 0 的數量(500)不像治療前&後那麼極端(660/780)，所以分數差不多
+
+---
+
+以下變數解釋方式皆相同，直接最後模型比較
+
+## 治療後Model(with offset)
+
+```{r}
+
+ggplot(afterdata, aes(teeth3)) +
+  geom_histogram() +
+  scale_x_log10()
+
+```
+
+---
+
+### 1.poisson
+
+```{r}
+head(afterdata)
+```
+
+```{r}
+
+model1 = glm(teeth3 ~ offset(log(year3)) + (age + gender + income), family = poisson, data = afterdata)
+
+summary(model1)
+
+```
+
+##### 泊松回歸的擬合優度偏差檢驗
+
++ https://thestatsgeek.com/2014/04/26/deviance-goodness-of-fit-test-for-poisson-regression/
+
+```{r}
+# overall goodness of fit test for Poisson model
+# pchisq(model1$deviance, df=model1$df.residual, lower.tail=FALSE)
+
+with(model1, cbind(res.deviance = deviance, df = df.residual,
+  p = pchisq(deviance, df.residual, lower.tail=FALSE)))
+
+```
+
+#### 結果
+
+零假設是我們的模型被正確指定，我們有強有力的證據拒絕該假設。<br>
+所以我們有強有力的證據表明我們的模型擬合不佳。<br>
+
++ 但也許我們只是運氣不好——即使原假設為真，檢驗也有 5% 的機率會被拒絕。
+
+### 2.zero+poisson
+
++ https://stats.oarc.ucla.edu/r/dae/zip/
+
+```{r}
+
+model2 <- zeroinfl(teeth3 ~ offset(log(year3)) + (age + gender + income) | offset(log(year3)) + (age + gender + income), data = afterdata)
+
+summary(model2)
+AIC(model2)
+
+```
+
+Over dispersion:<br><br>
+One of the important assumptions of the Poisson model is equi-dispersion.<br><br>
+That is,<br>
+the mean and variance are equal:<br><br>
+
+One way to solve the over dispersion problem is to use an alternative distribution for count data.<br> 
+Negative Binomial regression model:
+
+### 3.NB
+
++ https://stats.idre.ucla.edu/r/dae/negative-binomial-regression/
+
+```{r}
+
+ggplot(afterdata, aes(teeth3, fill = income)) +
+  geom_histogram(binwidth=1) +
+  facet_grid(income ~ ., margins=TRUE, scales="free")
+
+```
+
+```{r}
+
+ggplot(afterdata, aes(teeth3, fill = gender)) +
+  geom_histogram(binwidth=1) +
+  facet_grid(gender ~ ., margins=TRUE, scales="free")
+
+```
+
+```{r}
+
+with(afterdata, tapply(teeth3, income, function(x) {
+  sprintf("M (SD^2) = %1.2f (%1.2f)", mean(x), (sd(x))^2)
+}))
+
+```
+
+```{r}
+
+with(afterdata, tapply(teeth3, gender, function(x) {
+  sprintf("M (SD^2) = %1.2f (%1.2f)", mean(x), (sd(x))^2)
+}))
+
+```
+
+
+```{r}
+
+model3 <- glm.nb(teeth3 ~ offset(log(year3)) + (age + gender + income), data = afterdata)
+
+summary(model3)
+
+```
+
+##### Checking goodness of fit for Poisson regression model
+
+```{r}
+
+X2 <- 2 * (logLik(model1) - logLik(model3))
+X2
+
+pchisq(X2, df = 1, lower.tail=FALSE)
+
+
+```
+
+### 4.zero+NB
+
++ https://www.rdocumentation.org/packages/pscl/versions/1.5.5/topics/zeroinfl
+
+```{r}
+
+model4 <- zeroinfl(teeth3 ~ offset(log(year3)) + (age + gender + income) | offset(log(year3)) + (age + gender + income), data = afterdata, dist = "negbin")
+
+summary(model4)
+AIC(model4)
+
+```
+
+### Vuong non-nested hypothesis testing to compare different models
+
+```{r}
+# 基於對兩個不嵌套模型的預測概率的比較
+
+vuong(model1, model2) # 普通泊松 vs 零膨脹泊鬆         
+vuong(model3, model4) # 普通負二項式與零膨脹負二項式
+
+```
+
+#### 結果
+
++ 第一個結果顯示 普通泊松 < 零膨脹泊鬆(好)
++ 第二個結果顯示 普通負二項式 < 零膨脹負二項式(好)
+
++ 負二項式分佈迴歸的模型更加擬合數據
++ 由 AIC: 15393/ AIC: 13524.12/ AIC: 12412/ AIC: 12385.3 也能得出零膨脹負二項式較好
+
+---
+
+### 總結果
+
++ 前 : AIC: 9068.3/ AIC: 8075.904/ AIC: 7782.7/ AIC: 7754.268     
++ 中 : AIC: 8030.3/ AIC: 7256.85 / AIC: 6530.7/ AIC: 6538.664  
++ 後 : AIC: 15393 / AIC: 13524.12/ AIC: 12412 / AIC: 12385.3
+
+不管哪個模型哪個時間點，<br>
+三個變數對平均拔牙顆數都有顯著影響(age增加 、gender增加、income減少)<br>
+兩個變數(age減少、gender減少)幾乎顯著影響 Zero-inflation model
+
++ 負二項式分佈迴歸的模型更加擬合數據
+
+---

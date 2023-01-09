@@ -1,0 +1,668 @@
+---
+title: "迴歸分析"
+author: "B082040005 高念慈"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r results='hide', message=FALSE, warning=FALSE, echo=F}
+
+pacman::p_load(dplyr,ggplot2,caTools,ROCR,chorddiag,plotly)
+pacman::p_load(magrittr, readr, caTools, ggplot2, dplyr, vcd, latex2exp,Matrix,tidyr)
+pacman::p_load(car, GGally, mvtnorm)   # GGally:平行坐標圖
+library(corrplot)   # 相關係數矩陣圖
+library(seriation)  # 序列化
+library(magrittr)   # corrRect() 可在繪圖上添加矩形
+pacman::p_load(FactoMineR, factoextra) # 多元尺度分析(MDS)
+library(ggrepel) # 排斥重疊的文本標籤
+library(MASS)    # 基礎平行坐標圖
+
+# install.packages(c("VIM","mice","ROSE")) 
+library(VIM)   # aggr是VIM包中的函数，可以形成缺失图。
+library(ROSE)  # Undersampling，ovun.sample語法
+
+# rm(list=ls(all=T))
+```
+
+## 背景知識(動機)
+
++ 聯合國世界衛生組織（WHO）將憂鬱症列為2020年需重視的疾病第二名，僅次於心血管疾病
++ 2020年造成人類失能(disability)前十名的疾病，第一名是憂鬱症
++ 人類社會整體疾病負擔(Global burden of Disease)前十名的疾病，第二名是憂鬱症
++ 世界衛生組織估計，憂鬱症將成為2030年全球疾病負擔的主要原因
+<br><br>
+憂鬱症會造成一個人無法工作，生產力下降，同時造成家庭社會嚴重的負擔。<br>
+憂鬱症常常早發而持續，甚至有些會復發，<br>
+有15%的憂鬱症患者最後會死於自殺，這些都造成了家庭社會的損失與遺憾。<br><br>
+
+```{r , echo=F}
+
+knitr::include_graphics("C:/Users/user/Desktop/archive/messageImage_1669049863058.jpg")
+
+knitr::include_graphics("C:/Users/user/Desktop/archive/messageImage_1669050895561.jpg")
+
+```
+<br><br>
+據統計台灣有8.9%的人口罹患憂鬱症，亦即有超過200萬人受憂鬱症所苦，約有十分之一的人口有憂鬱症狀<br><br>
+
+```{r, echo=F}
+
+knitr::include_graphics("C:/Users/user/Desktop/archive/messageImage_1669049768470.jpg")
+
+```
+<br>
+2022-06-19<br>
+世界衛生組織指出，全球大約每8人就有一人患有心理疾病。<br>
+世衛組織在一份20年來規模最大的全球心理健康報告中表示，在疫情之前已有近10億人患有精神疾病，<br>
+疫情爆發後第一年，抑鬱和焦慮發生率提高了25%，本來就不足的資源又被用來對抗疫情。<br>
+根據報告，高所得國家有超過70%患有精神病的人能獲得治療，在低所得國家卻只有12%。<br><br>
+
+```{r, echo=F}
+
+knitr::include_graphics("C:/Users/user/Desktop/archive/messageImage_1669049917760.jpg")
+
+```
+<br><br>
+
+#### 憂鬱症污名化
+
+社會上對於精神疾病了解不多，不清楚憂鬱症是需要治療的，<br>
+對憂鬱症等精神病患者充斥各種標籤，<br>
+不僅讓憂鬱症病患在求學、工作上遇到不少困難，<br>
+更導致出現身心症狀的潛在患者不敢就醫，不願承認自己生病了。<br><br>
+
+報告還呼籲不要再給心理健康貼上污名標籤，<br>
+並指出有20個國家仍把自殺未遂視為犯罪。<br><br>
+
+```{r, echo=F}
+
+knitr::include_graphics("C:/Users/user/Desktop/archive/messageImage_1669050061726.jpg")
+
+```
+
++ 資料來源 :
+
++ https://depressytrouble.tw/index.php/portfolio/rule_the_world/
++ https://www.storm.mg/article/4384549
+
+
+<br>
+
+## 資料(背景)介紹(2018年)
+
+<br>
+
++ 資料來源 : https://www.kaggle.com/datasets/diegobabativa/depression
++ 資料源頭 : https://zindi.africa/competitions/busara-mental-health-prediction-challenge/data
+
+<br>
+
+## 資料背景&目的
+
+<br>
+
+數據來自 Busara 中心在 2015 年在肯亞西部維多利亞湖附近的 Siaya 縣農村進行的一項研究。<br><br>
+
+世界衛生組織估計，<br>
+每年有 130 万肯亞人患有未經治療的重度抑鬱症（MDD；通常稱為抑鬱症），<br>
+而撒哈拉以南非洲是世界上該病患病率最高的地區。<br>
+然而，肯尼亞的心理健康治療缺乏資源和污名化。<br>
+在肯尼亞，每百萬人中只有兩名經過認證的精神科醫生。<br>
+城市地區以外的設施很少，人們不太可能知道或訪問它們。<br><br>
+
++ 目的
+
+對潛在病例進行明智的定位可以幫助使稀缺資源到達最需要的人手中，並改善或挽救無數人的生命。<br><br>
+
+注意：<br>
+所使用的儀器是一種流行病學而非臨床抑鬱症測量方法。<br>
+換句話說，它高度提示抑鬱症的存在，但不等同於診斷，只能由有執照的臨床醫生做出。<br><br>
+
+
+```{r, echo=F}
+
+knitr::include_graphics("C:/Users/user/Desktop/archive/messageImage_1669045298738.jpg")
+
+```
+
+```{r }
+
+depressed = read.csv("C:\\Users\\user\\Desktop\\archive\\train.csv")
+
+depressed = depressed[ , c("surveyid", "village", "femaleres", "age",
+                           "married", "children", "edu", "hh_totalmembers",
+                           "asset_livestock", "asset_durable", "asset_savings",
+                           "cons_social", "cons_other", "ent_wagelabor", 
+                           "ent_ownfarm", "ent_business", "ent_nonagbusiness",
+                           "ent_farmrevenue", "ent_farmexpenses", 
+                           "labor_primary", "durable_investment", 
+                           "nondurable_investment", "depressed")]
+
+# 選這23個是對應資料來源的23個變數，
+# 因為發現資料來源的內容有明顯錯誤(跟錢有關的變數小數點幾乎都錯)
+# 所以取對應資料源頭的變數再加以篩選
+
+str(depressed)
+summary(depressed)
+
+```
+
+## 變數介紹
+
+1143 筆觀察值；23 個變數<br>
+
+1. "surveyid" : int 調查編號
+2. "village" : int 村莊編號         
+3. "femaleres" : int 女受訪者:1
+4. "age" : num 年齡（受訪者）            
+5. "married" : int 已婚:1
+6. "children" : int 孩子數量     
+7. "edu" : int 完成教育年限（受訪者）
+8. "hh_totalmembers" : int 家庭總成員
+9. "asset_livestock" : num 家畜價值（美元）
+10. "asset_durable" : num 耐用品價值（美元）      
+11. "asset_savings" : num 存款(美元)
+12. "cons_social" : num 生活開銷（美元）
+13. "cons_other" : num 其他支出(美元)
+14. "ent_wagelabor" : int 僱傭勞動創造的主要收入（虛擬）
+15. "ent_ownfarm" : int 主要收入來源是自己的農場（虛擬） 
+16. "ent_business" : int 農業非主要收入來源（虛擬）
+17. "ent_nonagbusiness" : int 非農業業主（虛擬）
+18. "ent_farmrevenue" : num 每月農場收入（美元）
+19. "ent_farmexpenses" : num 農場支出，每月（美元）
+20. "labor_primary" : int 臨時工或受僱傭勞動為主要收入來源(虛擬)   
+21. "durable_investment" : num 長期投資
+22. "nondurable_investment" : num 短期投資
+23. "depressed" : int 達到中度抑鬱症的流行病學閾值，目標，沮喪：[0：沒有沮喪]或[1：沮喪]
+
+```{r, echo=F}
+colnames(depressed)
+dim(depressed)
+```
+
+## 資料探勘
+
+### 缺失值
+
+```{r}
+
+sum(is.na(depressed)) # 334
+aggr(depressed, prop = F, number = T, combined = T)
+
+# depressed[!complete.cases(depressed),] # 找缺失值出現的地方(row)
+# sum(is.na(depressed$hh_totalmembers))  # 334
+
+```
+
+```{r}
+
+summary(aggr(depressed,plot = F)) # hh_totalmembers   334
+
+```
+
++ https://www.rdocumentation.org/packages/VIM/versions/6.2.2/topics/aggr
+
+```{r}
+
+a = table(is.na(depressed$hh_totalmembers),depressed$depressed)
+prop.table(a,margin = 1)
+
+```
+
++ NA 值跟是否憂鬱比例差不多，推測此 NA 值有無對解釋目標影響不大
+
+
+### 目標變數不平衡
+
+```{r}
+
+label = data.frame(table(depressed$depressed))
+
+ggplot(data = label,aes(x = Var1, y = Freq))+
+  geom_bar(stat = "identity",fill = "skyblue4")+   # 条形的高度表示数据数据的值
+  theme_bw()+
+  theme(panel.grid.major.y = element_blank())+
+  geom_text(aes(label = Freq), vjust = 1.5, size = 4.5, color = "white")+
+  xlab("Depressed")+
+  ylab("Count")
+
+```
+
++ 採取過採樣和欠採樣的組合
+
+```{r}
+
+balanced_sample  <- ovun.sample(depressed ~ ., data = depressed, method = "both", N=nrow(depressed), seed = 5)$data
+table(balanced_sample$depressed)
+
+# c("over", "under","both"):過採樣少數示例、欠採樣多數示例或過採樣和欠採樣的組合
+
+```
+
++ ovun.sample：過採樣、欠採樣、過採樣和欠採樣的組合
++ https://www.rdocumentation.org/packages/ROSE/versions/0.0-4/topics/ovun.sample
+
++ 確認日標變數是否平衡
+
+```{r}
+
+label = data.frame(table(balanced_sample$depressed))
+
+ggplot(data = label,aes(x = Var1, y = Freq))+
+  geom_bar(stat = "identity",fill = "skyblue4")+   # 条形的高度表示数据数据的值
+  theme_bw()+
+  theme(panel.grid.major.y = element_blank())+
+  geom_text(aes(label = Freq), vjust = 1.5, size = 4.5, color = "white")+
+  xlab("Depressed")+
+  ylab("Count")
+
+```
+
+### 補缺失值
+
+```{r}
+
+sum(is.na(balanced_sample)) # 0
+aggr(balanced_sample, prop = F, number = T, combined = T)
+
+# depressed[!complete.cases(depressed),] # 找缺失值出現的地方(row)
+# sum(is.na(depressed$hh_totalmembers))  # 334
+
+```
+
+```{r}
+
+a = table(is.na(balanced_sample$hh_totalmembers),balanced_sample$depressed)
+prop.table(a,margin = 1)
+
+```
+
++ 結果在處理不平衡目標時，程式自動把含 NA 的 row 刪掉了
+
+```{r}
+
+# 去NA值的家庭成員分布跟新資料集的家庭成員分布相似
+hist(data.frame(depressed[complete.cases(depressed),])$hh_totalmembers)
+hist(balanced_sample$hh_totalmembers)
+
+```
+
+### 資料分布
+
+```{r}
+
+cormatrix =  cor(balanced_sample)
+testRes = cor.mtest(balanced_sample, conf.level = 0.95)
+corrplot(cormatrix, p.mat = testRes$p, method = 'ellipse', 
+         col = COL2('RdBu', 10),type = 'lower',
+         insig='blank',addCoef.col ='black',
+         number.cex = 0.5, order = 'hclust', diag=FALSE,
+         tl.cex  =  0.5)
+
+# method = c("circle", "square", "ellipse", "number", "shade", "color", "pie")
+# 'pch' (default), 'p-value', 'blank'(空白), 'n', 'label_sig'
+
+
+```
+
++ 在95%信心水準下只有age、hh_totalmembers、edu 有顯著相關，但是相關性並不高
++ depressed 跟變數可能較沒有線性關係
+
++ [corrplot 包簡介](https://cran.r-project.org/web/packages/corrplot/vignettes/corrplot-intro.html)
+
+## 模型 & 挑選變數
+
++ 目標變數是目標事件發生機率P經過log函數轉換成log odds值才進行線性預測
+
+### 模型1
+
++ 變數幾乎都跟錢有關，沒特別想看的，所以先建一個 full model
+
+#### 結果
+
+一開始以為很多變數都會顯著相關，<br>
+沒想到23個變數只有教育年限(edu)跟每月農場支出(ent_farmexpenses)有顯著相關
+
+```{r}
+
+model = glm(depressed~.,data = balanced_sample,family = "binomial")
+summary(model)
+
+```
+
++ 挑選變數看會不會有所改善
++ 這裡用的方法為:利用雙向逐步回歸算法搭配 AIC 選擇模型
+
+```{r results='hide'}
+step(model)
+```
+
+### 模型2
+
+```{r}
+
+model2 = glm(formula = depressed ~ age + married + edu + hh_totalmembers + 
+             asset_savings + cons_social + ent_ownfarm + ent_farmexpenses, 
+             family = "binomial", data = balanced_sample)
+
+summary(model2)
+
+
+```
+
+```{r}
+b = coef(model2); b   # extract (提取) the regression coef
+```
+
+#### 結果
+
+只剩8個變數，模型變得更簡潔易讀，顯著的變數也增加到4個了
+
+---
+
++ 最後一個模型，直接拿模型二+交互向(模型3)+AIC當最後的模型
+
+### 模型3
+
+```{r}
+
+model3 = glm(formula = depressed ~ (age + married + edu + hh_totalmembers + 
+             asset_savings + cons_social + ent_ownfarm + ent_farmexpenses)^2, 
+             family = "binomial", data = balanced_sample)
+
+summary(model3)
+
+```
+
+```{r results='hide'}
+
+step(model3)
+
+```
+
+### 模型4
+
+```{r}
+
+model4 = glm(formula = depressed ~ age + married + edu + hh_totalmembers +
+             asset_savings + cons_social + ent_ownfarm + ent_farmexpenses + 
+             age:married + age:cons_social + age:ent_ownfarm + married:hh_totalmembers +
+             married:ent_ownfarm + edu:hh_totalmembers + edu:asset_savings +
+             edu:cons_social + hh_totalmembers:cons_social + asset_savings:cons_social +
+             asset_savings:ent_ownfarm + asset_savings:ent_farmexpenses + 
+             cons_social:ent_ownfarm, family = "binomial", data = balanced_sample)
+
+summary(model4)
+
+```
+
+```{r}
+d = coef(model4); d   # extract (提取) the regression coef
+```
+
+#### 結果
+
+選出 21 個變數，顯著的變數增加到 15個，<br>
+
+一般變數 : 5/8<br>
+交互項 : 10/13<br>
+
++ [在逐步算法中通過 AIC 選擇模型](https://www.rdocumentation.org/packages/stats/versions/3.6.2/topics/step)
+
++ [R中的雙向逐步回歸](https://stats.stackexchange.com/questions/97250/stepwise-regression-in-r-with-both-direction)
+
+---
+
+## 分析結果、解釋
+
+**模型：**
+
++ General Linear Model(GLM): $y = Link(f(x)) = f(x) = b_0 + b_1x_1 + b_2x_2 + ..$ 
+
++ Logistic Regression: $log(odd) = log(\frac{p}{1-p}) = b_0 + b_1 x_1 + b_2 x_2 + ... =  f(x)$
+
++ $odd = Exp(log(odd)) = \frac{p}{1-p}，\text{ where } p = Pr[y=1]$
+
++ $Pr[y = 1] = prob = \frac{odd}{1+odd} = logistic(f(x)) = \frac{1}{1+\exp(-f(x))}$
+
++ Logistic Function: $Logistic(F_x) = \frac{1}{1+Exp(-F_x)} = \frac{Exp(F_x)}{1+Exp(F_x)}$
+
+**係數：**
+
++ $Odd_0 = Exp(b_0 + b_1 x_1 + ...)$
+
++ $Odd_1 = Exp[b_0 + b_1(x_1+1) + ...] = Exp(b_0 + b_1 x_1 + b_1 + ...) = Exp(b_0 + b_1 x_1 + ...) \times Exp(b_1)$
+
++ $Odd_1 = Odd_0 \times Exp(b_1)$
+
++ $\frac{Odd_1}{Odd_0} =  Exp(b_1) \:\:\;(勝率比)$
+
++ 係數的指數是$\;y=1\;$的`勝率`增加的倍數
+
++ 係數的指數就是勝率比；也就是說，$xi$ 每增加 1 單位，$y=1$ 的勝率會變成原來的 $Exp(bi)$ 倍
+
++ 學習重點：<br>
+&emsp; ■ 各預測變數的(勝率)效果是相乘，而不是相加<br>
+&emsp; ■ 機率和勝率之間的關係並不是線性的：<br>
+&emsp; &emsp; ■ 邏輯式回歸裡面各預測變數的勝率效果是固定的<br>
+&emsp; &emsp; ■ 但是他們的機率效果並不是固定的<br>
+&emsp; &emsp; ■ 我們需先推算原先的機率，才能推算變數的機率效果<br><br>
+
+---
+
+```{r}
+epiDisplay::logistic.display(model2)  # 算OR
+```
+
++ 以下皆為個人推測 無證據
+
++ 模型2:
+
+顯著變數解釋:<br>
+
+1. edu : -0.101840
+
+每多讀一年書，得憂鬱症的勝率會變成原來的 exp(-0.12302) = 0.884246 倍<br>
+讀越多書，未來工作選擇多，生存可能比較容易，壓力下降
+
+2. hh_totalmembers : 0.092912048
+
+家裡每多一位成員，得憂鬱症的勝率會變成原來的 exp(0.092912048) = 1.097365 倍<br>
+在肯亞有收入都不一定養得起自己了，多個人多張嘴多負擔，壓力上升
+
+3. ent_ownfarm : -0.383226020
+
+主要收入來源來自自己的農場，得憂鬱症的勝率會變成原來的 exp(-0.383226020) = 0.6816588 倍<br>
+有自己的農場=有地=有資產還能自給自足，壓力下降
+
+4. ent_farmexpenses : 0.037946947
+
+每月農場支出每增加 1 美元，得憂鬱症的勝率會變成原來的 exp(0.037946947) = 1.038676 倍<br>
+雖然此支出是為了賺錢，但錢沒了還是會使人難過
+
+---
+
+```{r}
+epiDisplay::logistic.display(model4)
+```
+
++ 模型4:
+
+顯著變數解釋:<br>
+
+1. married：3.5884982710
+
+有結婚的，得憂鬱症的勝率會變成原來的 exp(3.5884982710) = 36.1797 倍<br>
+一次增加許多家庭成員需要照顧，壓力很大，肯亞是一夫多妻制<br>
+(有 3 個交互項，影響有正有負)
+
+2. edu：-0.1945225049
+
+每多讀一年書，得憂鬱症的勝率會變成原來的 exp(-0.1945225049) = 0.8232277 倍<br>
+讀越多書，未來工作選擇多，生存可能比較容易，壓力下降<br>
+(有 3 個交互項，影響有正有負)
+
+3. hh_totalmembers：0.3249753628
+
+家裡每多一位成員，得憂鬱症的勝率會變成原來的 exp(0.3249753628) = 1.383997 倍<br>
+在肯亞有收入都不一定養得起自己了，多個人多張嘴多負擔，壓力上升<br>
+(有 3 個交互項，影響有正有負)
+
+4. ent_ownfarm：-4.4851411297
+
+主要收入來源來自自己的農場，得憂鬱症的勝率會變成原來的 exp(-4.4851411297) = 0.0112753 倍<br>
+有自己的農場=有地=有資產還能自給自足，壓力下降<br>
+(有 4 個交互項，影響有正有負)
+
+5. ent_farmexpenses：0.0601564682
+
+每月農場支出每增加 1 美元，得憂鬱症的勝率會變成原來的 exp(0.0601564682) = 1.062003 倍<br>
+雖然此支出是為了賺錢，但錢沒了還是會使人難過<br>
+(有 1 個交互項，影響負的，壓力會下降)
+
+---
+
+6. age:married：-0.0689624466
+
+此人已婚且年紀每增加一歲，得憂鬱症的勝率會變成原來的 exp(-0.0689624466) = 0.9333617 倍<br>
+生活慢慢步入正軌、熟悉、看開了/也許成為被後輩照顧的那個人了，下降<br>
+同時須考慮 age 跟 married 每增加一單位的影響的影響
+
+7. age:cons_social：0.0041701012
+
+年紀每增加一歲且生活開銷增加一美元，得憂鬱症的勝率會變成原來的 exp(0.0041701012) = 1.004179 倍<br>
+年齡增加、支出上升，多少會焦慮，上升<br>
+同時須考慮 age 跟 cons_social 每增加一單位的影響的影響
+
+8. age:ent_ownfarm：0.0520171433
+
+年紀每增加一歲且主要收入來自自有農場，得憂鬱症的勝率會變成原來的 exp(0.0520171433) = 1.053394 倍<br>
+年齡增加、可能體力不如從前，做的少賺得少，生活負擔大<br>
+同時須考慮 age 跟 ent_ownfarm 每增加一單位的影響的影響
+
+9. married:hh_totalmembers：-0.3227938198
+
+此人已婚且家庭成員每增加一位，得憂鬱症的勝率會變成原來的 exp(-0.3227938198) = 0.7241231 倍<br>
+此時的成員增加應該為小孩(喜悅可能大於生活重擔)/新老婆(勞動力)，<br>
+在模型一雖然 children 這個變數不顯著，<br>
+但在解釋上他是能讓憂鬱大幅下降的變數，加上需同時考慮原變數的影響，結果:下降<br>
+同時須考慮 married 跟 hh_totalmembers 每增加一單位的影響的影響
+
+10. married:ent_ownfarm：2.8164453933
+
+此人已婚且主要收入來自自有農場，得憂鬱症的勝率會變成原來的 exp(2.8164453933) = 16.71732 倍<br>
+此數據集30歲婦女居多，猜測可能較會有財產上紛爭<br>
+同時須考慮 ent_ownfarm 跟 married 每增加一單位的影響的影響
+
+
+11. edu:asset_savings：-0.0024896224
+
+每多讀一年書且存款增加一美元，得憂鬱症的勝率會變成原來的 exp(-0.0024896224) = 0.9975135 倍<br>
+好上加好，降低<br>
+同時須考慮 edu 跟 asset_savings 每增加一單位的影響的影響
+
+12. hh_totalmembers:cons_social：-0.0220332318
+
+多一位成員且開銷增加一美元，得憂鬱症的勝率會變成原來的 exp(-0.0220332318) = 0.9782077 倍<br>
+同時須考慮 hh_totalmembers 跟 cons_social 每增加一單位的影響的影響
+
+13. asset_savings:cons_social：0.0018915498
+
+開銷增加一美元且存款增加一美元，得憂鬱症的勝率會變成原來的 exp(0.0018915498) = 1.001893 倍<br>
+同時須考慮 asset_savings 跟 cons_social 每增加一單位的影響的影響
+
+14. asset_savings:ent_ownfarm：0.0099589621
+
+主要收入來自自有農場且存款增加一美元，得憂鬱症的勝率會變成原來的 exp(0.0099589621) = 1.010009 倍<br>
+同時須考慮 asset_savings 跟 ent_ownfarm 每增加一單位的影響的影響
+
+15. asset_savings:ent_farmexpenses：-0.0008423672
+
+每月農場支出每增加 1 美元且存款增加一美元，得憂鬱症的勝率會變成原來的 exp(-0.0008423672) = 0.999158 倍<br>
+資金流動+存款<br>
+同時須考慮 asset_savings 跟 ent_farmexpenses 每增加一單位的影響的影響
+
++ 交互項有些變數在解釋上變得不太直覺，依解釋性跟模型複雜度，模型二是個好選擇
++ 模型四有共線性問題，，這可能是導致變數解釋不直覺甚至是相反的原因
++ 也可能是背景知識了解不夠，不同地區的風俗民情、個性大相逕庭
+
+---
+
+## 總
+
+模型二總的來說<br>
+年齡上升(不顯著)、已婚(不顯著)、家庭成員數、支出都會使得憂鬱的可能性上升<br>
+完成教育年限、存款(不顯著)、開銷(不顯著)、自有農場主要收入會使得憂鬱的可能性下降。
+
+---
+
++ [回归中的多重共线性需要排除么？](https://www.zhihu.com/question/403333784)
+
+```{r message=FALSE, warning=FALSE}
+
+
+vif(model)  # 第一個模型共線性並沒有第四個多但表現還是不顯著
+vif(model2) # 沒有共線性問題
+vif(model4) # 經過了逐步迴歸法還是有嚴重共線性問題
+
+```
+
+```{r}
+
+table(balanced_sample$femaleres,balanced_sample$married)
+table(balanced_sample$femaleres,balanced_sample$depressed)
+plot(density(balanced_sample$age)) 
+plot(density(balanced_sample$hh_totalmembers)) 
+# 多30歲上下婦女
+```
+
+```{r  message=FALSE, warning=FALSE}
+
+# 模型2 feature
+
+feature = c("age","married","edu","hh_totalmembers","asset_savings","cons_social","ent_ownfarm","ent_farmexpenses","depressed")
+
+# 未平衡
+
+dat = depressed[,feature]
+dat$depressed = as.factor(dat$depressed)
+dat$married = as.factor(dat$married)
+dat$ent_ownfarm = as.factor(dat$ent_ownfarm)
+
+ggpairs(dat,aes(colour = depressed),
+        upper = list(continuous = wrap("cor", size = 1.5)))+
+  theme_bw()+
+  theme(panel.grid.major.y = element_blank())
+
+# 平衡後
+
+dat = balanced_sample[,feature]
+dat$depressed = as.factor(dat$depressed)
+dat$married = as.factor(dat$married)
+dat$ent_ownfarm = as.factor(dat$ent_ownfarm)
+
+ggpairs(dat,aes(colour = depressed),
+        upper = list(continuous = wrap("cor", size = 1.5)))+
+  theme_bw()+
+  theme(panel.grid.major.y = element_blank())
+
+```
+
++ [ggplot2 generalized pairs plot](https://ggobi.github.io/ggally/reference/ggpairs.html)
+
+---
+
+```{r results='hide', message=FALSE, warning=FALSE, echo=F}
+
+# plot(model)
+# plot(model2)
+# plot(model3)
+# plot(model4)
+
+```
+
+---
