@@ -1,0 +1,176 @@
+---
+title: "Untitled"
+author: "B082040005 高念慈"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r}
+pacman::p_load(data.table,dplyr,tidyr,stringr,ggplot2,plotly,lubridate,vcd,gridExtra,
+               car,readr, sf, tmap,highcharter,RColorBrewer,magrittr,knitr,fastDummies)
+pacman::p_load(MatchIt,stargazer,cobalt,eatATA)
+pacman::p_load(quantreg)
+library("MatchIt","stargazer")
+library("quantreg")
+pals16 = c(brewer.pal(9,"Set1"),brewer.pal(8,"Set1")[1:4])
+library(readxl)
+library("eatATA")
+library(caret)
+library(corrplot)
+```
+
+```{r setup, include=FALSE}
+
+df = fread("C:/Users/user/Desktop/bigdata_HW/REPrice_KH_v5_Comb-Final.csv/REPrice_KH_v5_Comb-Final.csv", encoding = 'UTF-8', header = T)
+
+```
+
+## 資料概述
+
+```{r }
+# str(df)
+```
+
+```{r}
+
+colnames(df)[as.vector(sapply(df,is.numeric))] #111
+colnames(df)[as.vector(sapply(df,is.integer))] #70
+colnames(df)[as.vector(sapply(df,is.character))]#3
+
+
+nudata = df[,colnames(df)[as.vector(sapply(df,is.numeric))][1]]
+df[,"Li_SSSim"]
+
+class(colnames(df)[as.vector(sapply(df,is.numeric))])
+
+```
+## 改虛擬變數回類別
+
++ Building_Apt-general:公寓
++ Building_Apt-WS:華夏
++ Building_Apt-luxury:大樓
++ Building_House:透天
++ Building_Suit:套房
++ Building_Others:其他
+
+```{r}
+
+dum_cla = df[,c("Building_Apt-general","Building_Apt-luxury","Building_Apt-WS","Building_House","Building_Suit","Building_Others")]
+
+```
+
+```{r}
+
+# c("公寓","華夏","大樓","透天","套房","其他")
+
+for(i in 1:nrow(df)){
+  
+  if (df[i,"Building_Apt-general"]==1){
+  dum_cla[i,"房屋類別"]="公寓"
+} else if(df[i,"Building_Apt-luxury"]==1){
+  dum_cla[i,"房屋類別"]="大樓"
+} else if(df[i,"Building_Apt-WS"]==1){
+  dum_cla[i,"房屋類別"]="華夏"
+} else if(df[i,"Building_House"]==1){
+  dum_cla[i,"房屋類別"]="透天"
+} else if(df[i,"Building_Suit"]==1){
+  dum_cla[i,"房屋類別"]="套房"
+} else{
+  dum_cla[i,"房屋類別"]="其他"
+}
+  
+}
+
+# dum_cla[3,"房屋類別"]="其他"
+# df[,"Building_Others"]==1
+# dum_cla[,"房屋類別"]="公寓"
+
+```
+
+```{r}
+
+dum_class = dum_cla[,"房屋類別"]
+write.csv(dum_class,file="C:/Users/user/Desktop/bigdata_HW/med_data/dum_class.csv",row.names = FALSE)
+
+```
+
+## 高雄面積(平方公里)
+
+資料來源 : https://data.gov.tw/dataset/8410
+
+```{r }
+
+area = fread("C:/Users/user/Desktop/bigdata_HW/med_data/area.csv", encoding = 'UTF-8', header = T)
+
+temp = fread("C:/Users/user/Desktop/bigdata_HW/med_data/廟.csv", encoding = 'UTF-8', header = T)
+
+str(area)
+str(temp)
+
+```
+
+```{r}
+area = area[,c(2,4)]
+temp = temp[,c(2,3,4,5)]
+```
+
+```{r}
+
+KOarea = subset(area[grepl("高雄市" , site_id),])
+
+templenum = temp %>% group_by(場所區域) %>% summarise(coun = n())
+# table(temp$場所區域)
+
+```
+
+## 高雄各地面積
+
+```{r}
+ko = gsub('高雄市', '', KOarea$site_id)
+ko = data.frame(ko)
+finko = cbind(ko,KOarea$area)
+
+```
+
+## 合併資料
+
+```{r}
+den = merge(finko,templenum,by.x = "ko",by.y = "場所區域")
+den_temple = den %>% transmute(den[,1],"各區寺廟密度" = (den[,3]/as.numeric(den[,2])))
+
+write.csv(den_temple,file="C:/Users/user/Desktop/bigdata_HW/med_data/den_temple.csv",row.names = FALSE)
+
+```
+
+## 房價(總價)跟房屋類型關係圖
+
+```{r}
+# library(tidyr)
+
+price_class = cbind(df$Price_total,dum_class)
+
+# wide_price_class = spread(price_class,key = "房屋類別",value = "V2")
+# wide_price_class[is.na(wide_price_class)] <- 0
+
+
+qplot(x=log10(price_class$V1),                             
+      data=price_class,                     
+      geom="density",        # 圖形=density
+      xlab="房價(取log10)",                         
+      color= 房屋類別,
+      # 以顏色標註月份，複合式的機率密度圖
+)+theme_bw()
+
+```
+
+```{r}
+```
+
+```{r}
+```
+
+```{r}
+```
+
+```{r}
+```

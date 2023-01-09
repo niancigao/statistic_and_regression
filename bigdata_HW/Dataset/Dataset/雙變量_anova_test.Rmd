@@ -1,0 +1,131 @@
+---
+title: "雙變量分析"
+author: "黃建華"
+date: "10/31/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+### 資料處理
+```{r}
+pacman::p_load(tidyr,ggplot2,magrittr,dplyr,psych,RColorBrewer,tidyverse,data.table,viridis,plotly,mosaicData,microbenchmark)
+```
+
+
+```{r}
+kh <- read_csv("~/Desktop/中山企研時期/課程資料/碩二/巨量資料分析/巨量報告（資料更新版）/KHprice_temple.csv")
+```
+
+
+
+```{r}
+# 去掉NAs
+kh <- na.omit(kh)
+```
+
+
+
+
+
+# 建物類型與房價的分佈
+
+Building_Apt-general:公寓
+Building_Apt-WS:華夏
+Building_Apt-luxury:大樓
+Building_House:透天
+Building_Suit:套房
+
+
+```{r}
+kh_df <- read_csv("~/Desktop/中山企研時期/課程資料/碩二/巨量資料分析/巨量報告（資料更新版）/資料集/finaldata.csv")
+```
+
+
+```{r}
+kh_df<- na.omit(kh_df)
+```
+
+
+
+
+
+
+# 雙變量anova
+距離廟宇200、350、500
+### 公寓
+```{r}
+new_df <- kh_df[kh_df$temple_distant<=200|kh_df$temple_distant<=350|kh_df$temple_distant<=500,]
+```
+
+
+```{r}
+kh_df_公寓 <- new_df[new_df$房屋類別=='公寓',]
+```
+
+
+```{r}
+test1<-aov(Price_total ~ temple_distant,data =kh_df_公寓)
+summary(test1)
+```
+
+### 大樓
+```{r}
+new_df <- kh_df[kh_df$temple_distant<=200|kh_df$temple_distant<=350|kh_df$temple_distant<=500,]
+```
+
+
+```{r}
+kh_df_大樓 <- new_df[new_df$房屋類別=='大樓',]
+```
+
+
+```{r}
+test1<-aov(Price_total ~ temple_distant,data =kh_df_大樓)
+summary(test1)
+```
+
+### 華夏
+
+```{r}
+new_df <- kh_df[kh_df$temple_distant<=200|kh_df$temple_distant<=350|kh_df$temple_distant<=500,]
+```
+
+
+```{r}
+kh_df_華夏 <- new_df[new_df$房屋類別=='華夏',]
+```
+
+
+```{r}
+test1<-aov(Price_total ~ temple_distant,data =kh_df_華夏)
+summary(test1)
+```
+
+
+
+### 透天
+
+
+```{r}
+new_df <- kh_df[kh_df$temple_distant<=200|kh_df$temple_distant<=350|kh_df$temple_distant<=500,]
+```
+
+
+```{r}
+kh_df_透天 <- new_df[new_df$房屋類別=='透天',]
+```
+
+
+```{r}
+test1<-aov(Price_total ~ temple_distant,data =kh_df_透天)
+summary(test1)
+```
+
+
+
+

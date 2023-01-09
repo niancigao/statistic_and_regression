@@ -1,0 +1,938 @@
+---
+title: "data_analysis"
+author: "黃建華"
+date: "10/30/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+pacman::p_load(tidyr,ggplot2,magrittr,dplyr,psych,RColorBrewer,tidyverse,data.table,viridis)
+library(readxl)
+pals17 = c(brewer.pal(9,"GnBu"), rev(brewer.pal(8,"YlGnBu")),rev(brewer.pal(9,"PuBu")))
+```
+
+
+
+## R Markdown
+```{r}
+#kh <- read.csv("KHprice_temple.csv")
+#temple <- read.csv("廟.csv")
+# den <- read.csv("den_temple.csv", fileEncoding="Big5")
+
+kh <- read_csv("資料集/finaldata.csv")
+```
+
+```{r}
+# 以行政區計算寺廟總數
+#temple %>% group_by(場所區域) %>% summarise(
+   #number = n()
+#) %>% arrange(desc(number))  %>% head(3)
+```
+
+```{r}
+# 以密度計算
+den %>% arrange(desc(各區寺廟密度))  %>% head()
+```
+
+
+```{r}
+sum(is.na(kh))
+```
+
+```{r}
+kh <- na.omit(kh)
+```
+
+### 連續型變數敘述統計
+
+```{r}
+summary(kh)
+```
+
+
+### 行政區交易數量
+```{r}
+ trade_number <- kh %>% group_by(Location_Town) %>% 
+  summarise(
+    number_of_trade = n()
+  )
+
+trade_number
+```
+
+```{r fig.height=6, fig.width=10}
+ggplot(data=trade.number)+
+  geom_bar(aes(x=Location_Town,y=number_of_trade, fill=Location_Town),stat = 'identity')+
+  geom_text(aes(x=Location_Town, y=number_of_trade, label = number_of_trade),vjust=-0.3, size = 5) +
+  labs( x = "行政區", y = "交易量",title = "行政區交易量")+
+  theme(  strip.text = element_text( size = 22, color = "white",  
+                                    hjust = 0.5, family = "Heiti TC Light",face = "bold", ),
+          axis.text.x = element_text(angle = 45), # x軸呈現45度
+         text = element_text(size = 16,color="black",family = "Heiti TC Light",face = "bold", ),
+         axis.title.x = element_text(family = "Heiti TC Light"),
+         axis.title.y = element_text(family = "Heiti TC Light"),
+         title = element_text(family = "Heiti TC Light"),
+       panel.background = element_rect( fill = "#efefef", color = NA ),
+       panel.grid.major.x = element_blank(),
+       panel.grid.minor.x = element_blank(),
+       panel.grid.minor.y = element_blank(),
+       panel.grid.major.y = element_line( color = "#b2b2b2"),
+       legend.position = "none")
+
+```
+### 行政區交易價格(中位數)
+```{r}
+trade_price <-kh%>% group_by(Location_Town) %>% 
+  summarise(trade_price = median(Price_total))
+
+```
+
+
+
+```{r fig.height=6, fig.width=10}
+ggplot(data=trade_price)+
+  geom_bar(aes(x=Location_Town,y=trade_price, fill=Location_Town),stat = 'identity')+
+  geom_text(aes(x=Location_Town, y=trade_price, label =trade_price),vjust=-0.3, size = 4) +
+  labs( x = "行政區", y = "價格（萬元）",title = "行政區價格（中位數）")+
+  theme(  strip.text = element_text(size = 22, color = "white",  
+                                    hjust = 0.5, family = "Heiti TC Light",face = "bold" ),
+        axis.text.x = element_text(angle = 45), # x軸呈現45度
+         text = element_text(size = 16,color="black",family = "Heiti TC Light",face = "bold" ),
+         axis.title.x = element_text(family = "Heiti TC Light"),
+         axis.title.y = element_text(family = "Heiti TC Light"),
+         title = element_text(family = "Heiti TC Light"),
+       panel.background = element_rect( fill = "#efefef", color = NA ),
+       panel.grid.major.x = element_blank(),
+       panel.grid.minor.x = element_blank(),
+       panel.grid.minor.y = element_blank(),
+       panel.grid.major.y = element_line( color = "#b2b2b2"),
+       legend.position = "none")
+```
+
+### 廟宇距離
+```{r}
+summary(kh$temple_distant)
+
+```
+
+```{r}
+# 寺廟距離 boxplot
+ggplot(kh, aes(y = temple_distant)) +
+  geom_boxplot() +     # 箱形圖
+  scale_x_discrete()  # 移除 X 軸標示
+
+# 寺廟距離 histogram
+ggplot(kh, aes(y = temple_distant)) +
+  geom_histogram() +     # 長條圖
+  scale_x_discrete()  # 移除 X 軸標示
+
+
+```
+
+
+## 建物類型
+Building_Apt-general:公寓
+Building_Apt-WS:華夏
+Building_Apt-luxury:大樓
+Building_House:透天
+Building_Suit:套房
+### 建物類型[旗津(cijin)區]
+```{r}
+type_cijin <- kh %>% summarise(
+  公寓 = sum(kh$Building_Apt.general== 1 & kh$Location_Town =='旗津區'),
+  華夏 = sum(kh$Building_Apt.WS == 1 & kh$Location_Town =='旗津區'),
+  大樓 = sum(kh$Building_Apt.luxury== 1 & kh$Location_Town =='旗津區'),
+  透天 = sum(kh$Building_House== 1 & kh$Location_Town =='旗津區'),
+  套房 = sum(kh$Building_Suit== 1 & kh$Location_Town =='旗津區')
+)
+type_cijin
+type_cijin = type_cijin %>% gather(key = 建物類型, value = 數量, 公寓:套房)
+```
+
+```{r fig.height=7, fig.width=7}
+ggplot(data=type_cijin )+
+  geom_bar(aes(x=建物類型,y=數量, fill=建物類型),stat = 'identity')+
+  geom_text(aes(x=建物類型, y=數量, label =數量),vjust=-0.3, size = 8) +
+  labs( x = "建物類型", y = "數量",title = "")+
+  theme(  strip.text = element_text( size = 22, color = "white",  
+                                    hjust = 0.5, family = "Heiti TC Light",face = "bold" ),
+         text = element_text(size = 30,color="black",family = "Heiti TC Light",face = "bold" ),
+         axis.title.x = element_text(family = "Heiti TC Light"),
+         axis.title.y = element_text(family = "Heiti TC Light"),
+         title = element_text(family = "Heiti TC Light"),
+       panel.background = element_rect( fill = "#efefef", color = NA ),
+       panel.grid.major.x = element_blank(),
+       panel.grid.minor.x = element_blank(),
+       panel.grid.minor.y = element_blank(),
+       panel.grid.major.y = element_line( color = "#b2b2b2"),
+       legend.position = "none")
+```
+
+
+
+### 建物類型 [鹽埕(Yancheng)區]
+```{r}
+type_Yancheng <- kh %>% summarise(
+  公寓 = sum(kh$Building_Apt.general== 1 & kh$Location_Town =='鹽埕區'),
+  華夏 = sum(kh$Building_Apt.WS == 1 & kh$Location_Town =='鹽埕區'),
+  大樓 = sum(kh$Building_Apt.luxury== 1 & kh$Location_Town =='鹽埕區'),
+  透天 = sum(kh$Building_House== 1 & kh$Location_Town =='鹽埕區'),
+  套房 = sum(kh$Building_Suit== 1 & kh$Location_Town =='鹽埕區')
+)
+type_Yancheng
+type_Yancheng = type_Yancheng %>% gather(key = 建物類型, value = 數量, 公寓:套房)
+```
+
+```{r fig.height=7, fig.width=7}
+ggplot(data=type_Yancheng )+
+  geom_bar(aes(x=建物類型,y=數量, fill=建物類型),stat = 'identity')+
+  geom_text(aes(x=建物類型, y=數量, label =數量),vjust=-0.3, size = 8) +
+  labs( x = "建物類型", y = "數量",title = "")+
+  theme(  strip.text = element_text( size = 22, color = "white",  
+                                    hjust = 0.5, family = "Heiti TC Light",face = "bold" ),
+         text = element_text(size = 30,color="black",family = "Heiti TC Light",face = "bold" ),
+         axis.title.x = element_text(family = "Heiti TC Light"),
+         axis.title.y = element_text(family = "Heiti TC Light"),
+         title = element_text(family = "Heiti TC Light"),
+       panel.background = element_rect( fill = "#efefef", color = NA ),
+       panel.grid.major.x = element_blank(),
+       panel.grid.minor.x = element_blank(),
+       panel.grid.minor.y = element_blank(),
+       panel.grid.major.y = element_line( color = "#b2b2b2"),
+       legend.position = "none")
+```
+# 高雄全區
+```{r}
+#type_all <- group_by(kh$房屋類別)
+
+
+type_all <- kh %>% summarise(
+  公寓 = sum(kh$Building_Apt.general== 1 ),
+  華夏 = sum(kh$Building_Apt.WS == 1 ),
+  大樓 = sum(kh$Building_Apt.luxury== 1 ),
+  透天 = sum(kh$Building_House== 1 ),
+  套房 = sum(kh$Building_Suit== 1 )
+)
+type_all
+type_all = type_all %>% gather(key = 建物類型, value = 數量, 公寓:套房)
+```
+
+```{r fig.height=7, fig.width=7}
+ggplot(data=type_all )+
+  geom_bar(aes(x=建物類型,y=數量, fill=建物類型),stat = 'identity')+
+  geom_text(aes(x=建物類型, y=數量, label =數量),vjust=-0.3, size = 8) +
+  labs( x = "建物類型", y = "數量",title = "")+
+  theme(  strip.text = element_text( size = 22, color = "white",  
+                                    hjust = 0.5, family = "Heiti TC Light",face = "bold" ),
+         text = element_text(size = 30,color="black",family = "Heiti TC Light",face = "bold" ),
+         axis.title.x = element_text(family = "Heiti TC Light"),
+         axis.title.y = element_text(family = "Heiti TC Light"),
+         title = element_text(family = "Heiti TC Light"),
+       panel.background = element_rect( fill = "#efefef", color = NA ),
+       panel.grid.major.x = element_blank(),
+       panel.grid.minor.x = element_blank(),
+       panel.grid.minor.y = element_blank(),
+       panel.grid.major.y = element_line( color = "#b2b2b2"),
+       legend.position = "none")
+```
+
+
+
+## 交易類型
+Type_park_space:交易類型: 車位
+Type_land:交易類型: 土地
+Type_bulid without PS: 交易類型: 建物 (不包含車位)
+Type_build with PS: 交易類型: 建物 (包含車位)
+
+
+### 交易類型[旗津(cijin)區]
+```{r}
+trade_cijin <- kh %>% summarise(
+  車位 = sum(kh$Type_parking.space== 1 & kh$Location_Town =='旗津區'),
+  土地 = sum(kh$Type_land == 1 & kh$Location_Town =='旗津區'),
+  建物_包含車位= sum(kh$Type_building.with.PS== 1 & kh$Location_Town =='旗津區'),
+  建物_不包含車位 = sum(kh$Type_building.without.PS== 1 & kh$Location_Town =='旗津區')   
+)
+trade_cijin
+trade_cijin = trade_cijin %>% gather(key = 交易類型, value = 數量, 車位:建物_不包含車位)
+```
+
+```{r fig.height=7, fig.width=7}
+ggplot(data=trade_cijin )+
+  geom_bar(aes(x=交易類型,y=數量, fill=交易類型),stat = 'identity')+
+  geom_text(aes(x=交易類型, y=數量, label =數量),vjust=-0.3, size = 8) +
+  labs( x = "交易類型", y = "數量",title = "")+
+  theme(  strip.text = element_text( size = 22, color = "white",  
+                                    hjust = 0.5, family = "Heiti TC Light",face = "bold" ),
+         text = element_text(size = 30,color="black",family = "Heiti TC Light",face = "bold" ),
+         axis.title.x = element_text(family = "Heiti TC Light"),
+         axis.title.y = element_text(family = "Heiti TC Light"),
+         title = element_text(family = "Heiti TC Light"),
+       panel.background = element_rect( fill = "#efefef", color = NA ),
+       panel.grid.major.x = element_blank(),
+       panel.grid.minor.x = element_blank(),
+       panel.grid.minor.y = element_blank(),
+       panel.grid.major.y = element_line( color = "#b2b2b2"),
+       legend.position = "none")
+```
+
+### 交易類型[鹽埕(Yancheng)區]
+```{r}
+trade_Yancheng <- kh %>% summarise(
+  車位 = sum(kh$Type_parking.space== 1 & kh$Location_Town =='鹽埕區'),
+  土地 = sum(kh$Type_land == 1 & kh$Location_Town =='鹽埕區'),
+  建物_包含車位= sum(kh$Type_building.with.PS== 1 & kh$Location_Town =='鹽埕區'),
+  建物_不包含車位 = sum(kh$Type_building.without.PS== 1 & kh$Location_Town =='鹽埕區')   
+)
+trade_Yancheng
+trade_Yancheng = trade_Yancheng %>% gather(key = 交易類型, value = 數量, 車位:建物_不包含車位)
+```
+
+```{r fig.height=7, fig.width=7}
+ggplot(data=trade_Yancheng )+
+  geom_bar(aes(x=交易類型,y=數量, fill=交易類型),stat = 'identity')+
+  geom_text(aes(x=交易類型, y=數量, label =數量),vjust=-0.3, size = 8) +
+  labs( x = "交易類型", y = "數量",title = "")+
+  theme(  strip.text = element_text( size = 22, color = "white",  
+                                    hjust = 0.5, family = "Heiti TC Light",face = "bold" ),
+         text = element_text(size = 30,color="black",family = "Heiti TC Light",face = "bold" ),
+         axis.title.x = element_text(family = "Heiti TC Light"),
+         axis.title.y = element_text(family = "Heiti TC Light"),
+         title = element_text(family = "Heiti TC Light"),
+       panel.background = element_rect( fill = "#efefef", color = NA ),
+       panel.grid.major.x = element_blank(),
+       panel.grid.minor.x = element_blank(),
+       panel.grid.minor.y = element_blank(),
+       panel.grid.major.y = element_line( color = "#b2b2b2"),
+       legend.position = "none")
+```
+
+
+### 交易類型[高雄全區]
+```{r}
+
+trade_all <- kh %>% summarise(
+  車位 = sum(kh$Type_parking.space== 1),
+  土地 = sum(kh$Type_land == 1),
+  建物_包含車位= sum(kh$Type_building.with.PS== 1),
+  建物_不包含車位 = sum(kh$Type_building.without.PS== 1)   
+)
+trade_all
+trade_all= trade_all %>% gather(key = 交易類型, value = 數量, 車位:建物_不包含車位)
+```
+
+```{r fig.height=7, fig.width=7}
+ggplot(data=trade_all )+
+  geom_bar(aes(x=交易類型,y=數量, fill=交易類型),stat = 'identity')+
+  geom_text(aes(x=交易類型, y=數量, label =數量),vjust=-0.3, size = 8) +
+  labs( x = "交易類型", y = "數量",title = "")+
+  theme(  strip.text = element_text( size = 22, color = "white",  
+                                    hjust = 0.5, family = "Heiti TC Light",face = "bold" ),
+         text = element_text(size = 30,color="black",family = "Heiti TC Light",face = "bold" ),
+         axis.title.x = element_text(family = "Heiti TC Light"),
+         axis.title.y = element_text(family = "Heiti TC Light"),
+         title = element_text(family = "Heiti TC Light"),
+       panel.background = element_rect( fill = "#efefef", color = NA ),
+       panel.grid.major.x = element_blank(),
+       panel.grid.minor.x = element_blank(),
+       panel.grid.minor.y = element_blank(),
+       panel.grid.major.y = element_line( color = "#b2b2b2"),
+       legend.position = "none")
+```
+
+
+
+## Using type_L :住宅
+## Using type_B：商業
+## Using type_Far ：農用
+## Using type_Fac ：工業
+## Using type_O ：其他
+## 旗山區 \ 大寮區\ 鳳山區
+
+### 使用類型[旗津(Yancheng)區]
+```{r}
+use_Yancheng <- kh %>% summarise(
+     住宅 = sum(kh$Using.type_L==1 & kh$Location_Town=='旗津區'),
+     商業 = sum(kh$Using.type_B==1 & kh$Location_Town=='旗津區'),
+     農用 = sum(kh$Using.type_Far==1 & kh$Location_Town=='旗津區'),
+     工業 = sum(kh$Using.type_Fac==1 & kh$Location_Town=='旗津區'),
+     其他 = sum(kh$Using.type_O==1 & kh$Location_Town=='旗津區')
+)
+use_Yancheng
+use_Yancheng = use_Yancheng %>% gather(key = 使用類型, value = 數量, 住宅:其他)
+```
+
+```{r fig.height=7, fig.width=7}
+ggplot(use_Yancheng)+
+  geom_bar(aes(x=使用類型,y=數量, fill=使用類型),stat = 'identity')+
+  geom_text(aes(x=使用類型, y=數量, label =數量),vjust=-0.3, size = 8) +
+  labs( x = "使用類型", y = "數量",title = "")+
+  theme(  strip.text = element_text( size = 22, color = "white",  
+                                    hjust = 0.5, family = "Heiti TC Light",face = "bold" ),
+         text = element_text(size = 30,color="black",family = "Heiti TC Light",face = "bold" ),
+         axis.title.x = element_text(family = "Heiti TC Light"),
+         axis.title.y = element_text(family = "Heiti TC Light"),
+         title = element_text(family = "Heiti TC Light"),
+       panel.background = element_rect( fill = "#efefef", color = NA ),
+       panel.grid.major.x = element_blank(),
+       panel.grid.minor.x = element_blank(),
+       panel.grid.minor.y = element_blank(),
+       panel.grid.major.y = element_line( color = "#b2b2b2"),
+       legend.position = "none")
+```
+
+
+### 使用類型[鹽埕(Yancheng)區]
+
+```{r}
+use_Yancheng <- kh %>% summarise(
+     住宅 = sum(kh$Using.type_L ==1 & kh$Location_Town=='鹽埕區'),
+     商業 = sum(kh$Using.type_B ==1 & kh$Location_Town=='鹽埕區'),
+     農用 = sum(kh$Using.type_Far ==1 & kh$Location_Town=='鹽埕區'),
+     工業 = sum(kh$Using.type_Fac ==1 & kh$Location_Town=='鹽埕區'),
+     其他 = sum(kh$Using.type_O ==1 & kh$Location_Town=='鹽埕區')
+)
+use_Yancheng
+use_Yancheng = use_Yancheng %>% gather(key = 使用類型, value = 數量, 住宅:其他)
+```
+
+```{r fig.height=7, fig.width=7}
+ggplot(use_Yancheng)+
+  geom_bar(aes(x=使用類型,y=數量, fill=使用類型),stat = 'identity')+
+  geom_text(aes(x=使用類型, y=數量, label =數量),vjust=-0.3, size = 8) +
+  labs( x = "使用類型", y = "數量",title = "")+
+  theme(  strip.text = element_text( size = 22, color = "white",  
+                                    hjust = 0.5, family = "Heiti TC Light",face = "bold" ),
+         text = element_text(size = 30,color="black",family = "Heiti TC Light",face = "bold" ),
+         axis.title.x = element_text(family = "Heiti TC Light"),
+         axis.title.y = element_text(family = "Heiti TC Light"),
+         title = element_text(family = "Heiti TC Light"),
+       panel.background = element_rect( fill = "#efefef", color = NA ),
+       panel.grid.major.x = element_blank(),
+       panel.grid.minor.x = element_blank(),
+       panel.grid.minor.y = element_blank(),
+       panel.grid.major.y = element_line( color = "#b2b2b2"),
+       legend.position = "none")
+```
+
+
+### 使用類型[高雄全區]
+
+```{r}
+
+use_all <- kh %>% summarise(
+     住宅 = sum(kh$Using.type_L==1),
+     商業 = sum(kh$Using.type_B==1),
+     農用  = sum(kh$Using.type_Far==1),
+     工業 = sum(kh$Using.type_Fac==1),
+     其他 = sum(kh$Using.type_O==1)
+)
+use_all
+use_all = use_all %>% gather(key = 使用類型, value = 數量, 住宅:其他)
+```
+
+
+
+```{r fig.height=7, fig.width=7}
+ggplot(use_all)+
+  geom_bar(aes(x=使用類型,y=數量, fill=使用類型),stat = 'identity')+
+  geom_text(aes(x=使用類型, y=數量, label =數量),vjust=-0.3, size = 8) +
+  labs( x = "使用類型", y = "數量",title = "")+
+  theme(  strip.text = element_text( size = 22, color = "white",  
+                                    hjust = 0.5, family = "Heiti TC Light",face = "bold" ),
+         text = element_text(size = 30,color="black",family = "Heiti TC Light",face = "bold" ),
+         axis.title.x = element_text(family = "Heiti TC Light"),
+         axis.title.y = element_text(family = "Heiti TC Light"),
+         title = element_text(family = "Heiti TC Light"),
+       panel.background = element_rect( fill = "#efefef", color = NA ),
+       panel.grid.major.x = element_blank(),
+       panel.grid.minor.x = element_blank(),
+       panel.grid.minor.y = element_blank(),
+       panel.grid.major.y = element_line( color = "#b2b2b2"),
+       legend.position = "none")
+```
+
+
+
+# 房屋年齡
+# Basic density
+### 旗津(cijin)區
+```{r fig.height=7, fig.width=7}
+age_cijin <- kh[kh$Location_Town=='旗津區',]
+
+age_cijin <- ggplot(age_cijin, aes(x=Building_age)) + 
+  geom_density(alpha=10, fill = 'darkgreen') +
+  geom_vline(aes(xintercept=mean(Building_age)), # Add mean line
+            color="blue", linetype="dashed", size=1, fill ='cyan') + 
+  xlim(0, 100) +
+  theme(  strip.text = element_text( size = 22, color = "white",  
+                                    hjust = 0.5, family = "Heiti TC Light",face = "bold" ),
+         text = element_text(size = 30,color="black",family = "Heiti TC Light",face = "bold" ),
+         axis.title.x = element_text(family = "Heiti TC Light"),
+         axis.title.y = element_text(family = "Heiti TC Light"),
+         title = element_text(family = "Heiti TC Light"),
+       panel.background = element_rect( fill = "#efefef", color = NA ),
+       panel.grid.major.x = element_blank(),
+       panel.grid.minor.x = element_blank(),
+       panel.grid.minor.y = element_blank(),
+       panel.grid.major.y = element_line( color = "#b2b2b2"),
+       legend.position = "none")
+age_cijin
+```
+
+### 鹽埕(Yancheng)區
+```{r fig.height=7, fig.width=7}
+age_Yancheng <- kh[kh$Location_Town=='鹽埕區',]
+
+age_Yancheng <- ggplot(age_Yancheng, aes(x=Building_age)) + 
+  geom_density(alpha=10, fill = 'lightblue') +
+  geom_vline(aes(xintercept=mean(Building_age)), # Add mean line
+            color="blue", linetype="dashed", size=1, fill ='cyan') +
+  xlim(0, 100) +
+  theme(  strip.text = element_text( size = 22, color = "white",  
+                                    hjust = 0.5, family = "Heiti TC Light",face = "bold" ),
+         text = element_text(size = 30,color="black",family = "Heiti TC Light",face = "bold" ),
+         axis.title.x = element_text(family = "Heiti TC Light"),
+         axis.title.y = element_text(family = "Heiti TC Light"),
+         title = element_text(family = "Heiti TC Light"),
+       panel.background = element_rect( fill = "#efefef", color = NA ),
+       panel.grid.major.x = element_blank(),
+       panel.grid.minor.x = element_blank(),
+       panel.grid.minor.y = element_blank(),
+       panel.grid.major.y = element_line( color = "#b2b2b2"),
+       legend.position = "none")
+age_Yancheng
+```
+
+
+### 高雄全區
+```{r fig.height=7, fig.width=7}
+age_all <- ggplot(kh, aes(x=Building_age)) + 
+            geom_density(alpha=10, fill = 'darkred') +
+            geom_vline(aes(xintercept=mean(Building_age)), # Add mean line
+            color="blue", linetype="dashed", size=1, fill ='cyan') + 
+            xlim(0, 100) +
+  theme(  strip.text = element_text( size = 22, color = "white",  
+                                    hjust = 0.5, family = "Heiti TC Light",face = "bold" ),
+         text = element_text(size = 30,color="black",family = "Heiti TC Light",face = "bold" ),
+         axis.title.x = element_text(family = "Heiti TC Light"),
+         axis.title.y = element_text(family = "Heiti TC Light"),
+         title = element_text(family = "Heiti TC Light"),
+       panel.background = element_rect( fill = "#efefef", color = NA ),
+       panel.grid.major.x = element_blank(),
+       panel.grid.minor.x = element_blank(),
+       panel.grid.minor.y = element_blank(),
+       panel.grid.major.y = element_line( color = "#b2b2b2"),
+       legend.position = "none")
+
+age_all
+```
+
+
+
+# 房屋格局
+
+#Pattern_room:房間數
+```{r}
+room_number<-kh %>% group_by(Pattern_room) %>% summarise(
+   number = n()
+) %>% head(10)
+```
+
+```{r}
+room_number$Pattern_room <- as.character(room_number$Pattern_room)
+```
+
+```{r fig.height=7, fig.width=7}
+ggplot(data=room_number)+
+  geom_bar(aes(x=Pattern_room,y=number, fill=Pattern_room),stat = 'identity')+
+  geom_text(aes(x=Pattern_room, y=number, label =number),vjust=-0.3, size = 7) +
+  labs( x = "房間數", y ="數量",title = "房屋格局")+
+  theme(  strip.text = element_text(size = 35, color = "white",  
+                                    hjust = 0.5, family = "Heiti TC Light",face = "bold" ),
+        axis.text.x = element_text(angle = 0), # x軸呈現0度
+         text = element_text(size = 16,color="black",family = "Heiti TC Light",face = "bold" ),
+         axis.title.x = element_text(family = "Heiti TC Light"),
+         axis.title.y = element_text(family = "Heiti TC Light"),
+         title = element_text(family = "Heiti TC Light"),
+       panel.background = element_rect( fill = "#efefef", color = NA ),
+       panel.grid.major.x = element_blank(),
+       panel.grid.minor.x = element_blank(),
+       panel.grid.minor.y = element_blank(),
+       panel.grid.major.y = element_line( color = "#b2b2b2"),
+       legend.position = "none")
+```
+
+############### 雙變量 ###############
+
+# 雙變量
+
+# 建物類型與房價
+Building_Apt-general:公寓
+Building_Apt-WS:華夏
+Building_Apt-luxury:大樓
+Building_House:透天
+Building_Suit:套房
+
+```{r weight=7 hight=7}
+price_class <- kh[c('Price_total', '房屋類別')]
+
+colnames(price_class)[colnames(price_class) == "房屋類別"] ="building_type"
+
+price_class$building_type = str_replace(price_class$building_type, "公寓", "general")
+price_class$building_type = str_replace(price_class$building_type, "華夏", "WS")
+price_class$building_type = str_replace(price_class$building_type, "大樓", "luxury")
+price_class$building_type = str_replace(price_class$building_type, "透天", "House")
+price_class$building_type = str_replace(price_class$building_type, "套房", "Suit")
+price_class$building_type = str_replace(price_class$building_type, "其他", "others")
+
+
+qplot(x=log10(Price_total),                             
+      data=price_class,                     
+      geom="density",        # 圖形=density
+      xlab="log10(Price_total)",
+      ylab="density",                         
+      color= building_type,
+      fill= building_type,
+      alpha = 0.2,
+      family = "KaiTi"
+      # 以顏色標註月份，複合式的機率密度圖
+)+theme_bw()
+
+```
+
+# 樓層與房價
+1-7 樓
+8-15 樓
+16-20 樓
+20 樓
+```{r weight=7 hight=7}
+price_type <- kh[c('Price_total', 'TtFloor')] 
+ price_type$build_level <- ifelse( price_type$TtFloor<=7,"1-7",ifelse( price_type$TtFloor<=15 &price_type$TtFloor>=8,"8-15",ifelse( price_type$TtFloor<=20 &price_type$TtFloor>=16,"16-20",ifelse( price_type$TtFloor>20,">20","others"))))
+
+
+
+
+qplot(x=log10(Price_total),                             
+      data=price_type,                     
+      geom="density",        # 圖形=density
+      xlab="log10(Price_total)",
+      ylab="density",                         
+      color= build_level,
+      fill= build_level,
+      alpha = 0.2,
+      family = "KaiTi"
+      # 以顏色標註月份，複合式的機率密度圖
+)+theme_bw() 
+ 
+
+```
+
+# 屋齡與價格
+10年以下
+11 - 20 年
+20 - 30 年
+30 年
+
+```{r weight=7 hight=7}
+price_age <-  kh[c('Price_total', 'Building_age')] 
+price_age$Building_age<- ifelse( price_age$Building_age<=10,'>10 years',ifelse( price_age$Building_age<=20 &price_age$Building_age>10,"11-20 years",ifelse( price_age$Building_age<=30 &price_age$Building_age>=21,"21-30 years",ifelse( price_age$Building_age>30,">30 years","others"))))
+
+qplot(x=log10(Price_total),                             
+      data=price_age,                     
+      geom="density",        # 圖形=density
+      xlab="log10(Price_total)",
+      ylab="density",                         
+      color= Building_age,
+      fill= Building_age,
+      alpha = 0.2,
+      family = "KaiTi"
+      # 以顏色標註月份，複合式的機率密度圖
+)+theme_bw() 
+
+  
+```
+
+
+
+# 使用類型與房價
+Using type_L :住宅
+Using type_B：商業
+Using type_Far ：農用
+Using type_Fac ：工業
+Using type_O ：其他
+```{r weight=7 hight=7}
+price_Usingtype <- kh[,c('Price_total', 'Using type_L','Using type_B','Using type_Far','Using type_Fac','Using type_O')]
+price_Usingtype$Using_type <- ifelse(price_Usingtype$`Using type_L`==1,'Residential',ifelse(price_Usingtype$`Using type_B`==1,'Business',ifelse(price_Usingtype$`Using type_Far`==1,'agricultural',ifelse(price_Usingtype$`Using type_Fac`==1,'industry','others'))))
+
+qplot(x=log10(Price_total),                             
+      data=price_Usingtype,                     
+      geom="density",        # 圖形=density
+      xlab="log10(Price_total)",
+      ylab="density",                         
+      color= Using_type,
+      fill= Using_type,
+      alpha = 0.2,
+      family = "KaiTi"
+      # 以顏色標註月份，複合式的機率密度圖
+)+theme_bw() 
+
+
+```
+
+# 交易類型與價格
+Type_park_space:交易類型: 車位
+Type_land:交易類型: 土地
+Type_bulid without PS: 交易類型: 建物 (不包含車位)
+Type_build with PS: 交易類型: 建物 (包含車位)
+```{r weight=7 hight=7}
+price_Type_trade <- kh[,c('Price_total', 'Type_parking space','Type_land','Type_building without PS','Type_building with PS')]
+
+
+price_Type_trade$trade_type <-ifelse(price_Type_trade$`Type_parking space`==1,'Park_space',ifelse(price_Type_trade$Type_land==1,'Type_Land',ifelse(price_Type_trade$`Type_building without PS`==1,'building_without PS',ifelse(price_Type_trade$`Type_building with PS`==1,'building_with PS','others'))))
+
+qplot(x=log10(Price_total),                             
+      data=price_Type_trade,                     
+      geom="density",        # 圖形=density
+      xlab="log10(Price_total)",
+      ylab="density",                         
+      color= trade_type,
+      fill= trade_type,
+      alpha = 0.2,
+      family = "KaiTi"
+      # 以顏色標註月份，複合式的機率密度圖
+)+theme_bw()
+
+```
+
+### 格局與價格
+
+```{r weight=7 hight=7}
+price_room <- kh[,c('Price_total','Pattern_room')]
+
+price_room$room_level<-ifelse(price_room$Pattern_room==1,'1',ifelse(price_room$Pattern_room==2,'2',ifelse(price_room$Pattern_room==3,'3',ifelse(price_room$Pattern_room==4,'4',ifelse(price_room$Pattern_room==5,'5',ifelse(price_room$Pattern_room==6,'6','< 6'))))))
+
+qplot(x=log10(Price_total),                             
+      data=price_room,                     
+      geom="density",        # 圖形=density
+      xlab="log10(Price_total)",
+      ylab="density",                         
+      color= room_level,
+      fill= room_level,
+      alpha = 0.2,
+      family = "KaiTi"
+      # 以顏色標註月份，複合式的機率密度圖
+)+theme_bw()
+```
+
+
+
+
+
+
+
+
+
+
+
+
+```{r}
+#ggplot(price_class,aes(x=log10(Price_total), color=房屋類別))+
+  #geom_density(aes(x=log10(Price_total), y = density, fill=房屋類別), alpha=0.2)+
+  #labs( x = "房價", y ="類別", title = "房價與房屋類別分佈圖")
+   #+  theme()
+```
+
+
+```{r fig.height=7, fig.width=7}
+#price_class <- 
+#qplot(x=log10(Price_total),                             
+      #data=price_class,                     
+      #geom="density",        # 圖形=density
+      #xlab="log10(Price_total)",
+      #ylab="density",                         
+      #color= 房屋類別,
+      #fill= 房屋類別,
+      #alpha = 0.2,
+      #family = "KaiTi"
+      # 以顏色標註月份，複合式的機率密度圖
+#)+theme_bw()
+```
+
+
+
+### 抓資料給00用QGIS畫圖
+```{r}
+qgis <- kh[c('x', 'Y', 'Location_Town')]
+
+
+write.csv(qgis,file = "~/Desktop/NSYSU/R/MIS572/Midterm/qgis.csv",row.names = FALSE)
+
+```
+
+
+############################ 以下沒動沒更改 ############################
+
+### 廟宇距離
+
+#### 旗山區
+```{r}
+kh$distance_tem_旗山_500<- ifelse(kh$temple_distant<=500 & kh$Location_Town=='旗山區' , 1, 0)
+```
+
+```{r}
+kh$distance_tem_旗山_1000 <-  ifelse(kh$temple_distant<=1000& kh$temple_distant >500 & kh$Location_Town=='旗山區' , 1, 0)
+```
+
+```{r}
+kh$distance_tem_旗山_2000 <-  ifelse(kh$temple_distant<=2000 & kh$temple_distant >1000 & kh$Location_Town=='旗山區' , 1, 0)
+```
+
+```{r}
+kh_temple_旗山 <-  select(kh,c('distance_tem_旗山_500','distance_tem_旗山_1000','distance_tem_旗山_2000'))
+```
+
+```{r}
+kh_temple_旗山 <- kh_temple_旗山 %>% 
+  summarise(
+               n_500 = sum( kh_temple_旗山$distance_tem_旗山_500 == 1),
+               n_1000 = sum( kh_temple_旗山$distance_tem_旗山_1000 == 1),
+               n_2000 = sum( kh_temple_旗山$distance_tem_旗山_2000 == 1)
+               
+           )
+kh_temple_旗山= kh_temple_旗山 %>% gather(key = 距離名稱, value = 數量, n_500:n_2000)
+```
+
+```{r}
+ggplot(data=kh_temple_旗山)+
+  geom_bar(aes(x=距離名稱,y=數量, fill=數量),stat = 'identity')+
+  geom_text(aes(x=距離名稱, y=數量, label =數量),vjust=-0.3, size = 3) +
+  labs( x = "距離", y ="數量",title = "")+
+  theme(  strip.text = element_text(size = 22, color = "white",  
+                                    hjust = 0.5, family = "Heiti TC Light",face = "bold" ),
+         text = element_text(size = 16,color="black",family = "Heiti TC Light",face = "bold" ),
+         axis.title.x = element_text(family = "Heiti TC Light"),
+         axis.title.y = element_text(family = "Heiti TC Light"),
+         title = element_text(family = "Heiti TC Light"),
+       panel.background = element_rect( fill = "#efefef", color = NA ),
+       panel.grid.major.x = element_blank(),
+       panel.grid.minor.x = element_blank(),
+       panel.grid.minor.y = element_blank(),
+       panel.grid.major.y = element_line( color = "#b2b2b2"),
+       legend.position = "none")
+```
+
+
+
+
+#### 大寮區
+
+```{r}
+kh$distance_tem_大寮_500<- ifelse(kh$temple_distant<=500 & kh$Location_Town=='大寮區' , 1, 0)
+```
+
+```{r}
+kh$distance_tem_大寮_1000 <-  ifelse(kh$temple_distant<=1000& kh$temple_distant >500 & kh$Location_Town=='大寮區' , 1, 0)
+```
+
+```{r}
+kh$distance_tem_大寮_2000 <-  ifelse(kh$temple_distant<=2000 & kh$temple_distant >1000 & kh$Location_Town=='大寮區' , 1, 0)
+```
+
+```{r}
+kh_temple_大寮 <-  select(kh,c('distance_tem_大寮_500','distance_tem_大寮_1000','distance_tem_大寮_2000'))
+```
+
+
+```{r}
+kh_temple_大寮 <- kh_temple_大寮 %>% 
+  summarise(
+               n_500 = sum( kh_temple_大寮$distance_tem_大寮_500 == 1),
+               n_1000 = sum( kh_temple_大寮$distance_tem_大寮_1000 == 1),
+               n_2000 = sum( kh_temple_大寮$distance_tem_大寮_2000 == 1)
+               
+           )
+kh_temple_大寮= kh_temple_大寮 %>% gather(key = 距離名稱, value = 數量, n_500:n_2000)
+```
+
+
+```{r}
+
+ggplot(data=kh_temple_大寮)+
+  geom_bar(aes(x=距離名稱,y=數量, fill=數量),stat = 'identity')+
+  geom_text(aes(x=距離名稱, y=數量, label =數量),vjust=-0.3, size = 3) +
+  labs( x = "距離", y ="數量",title = "")+
+  theme(  strip.text = element_text(size = 22, color = "white",  
+                                    hjust = 0.5, family = "Heiti TC Light",face = "bold" ),
+         text = element_text(size = 16,color="black",family = "Heiti TC Light",face = "bold" ),
+         axis.title.x = element_text(family = "Heiti TC Light"),
+         axis.title.y = element_text(family = "Heiti TC Light"),
+         title = element_text(family = "Heiti TC Light"),
+       panel.background = element_rect( fill = "#efefef", color = NA ),
+       panel.grid.major.x = element_blank(),
+       panel.grid.minor.x = element_blank(),
+       panel.grid.minor.y = element_blank(),
+       panel.grid.major.y = element_line( color = "#b2b2b2"),
+       legend.position = "none")
+```
+
+#### 鳳山區
+
+```{r}
+kh$distance_tem_鳳山_500<- ifelse(kh$temple_distant<=500 & kh$Location_Town=='鳳山區' , 1, 0)
+```
+
+```{r}
+kh$distance_tem_鳳山_1000 <-  ifelse(kh$temple_distant<=1000& kh$temple_distant >500 & kh$Location_Town=='鳳山區' , 1, 0)
+```
+
+```{r}
+kh$distance_tem_鳳山_2000 <-  ifelse(kh$temple_distant<=2000 & kh$temple_distant >1000 & kh$Location_Town=='鳳山區' , 1, 0)
+```
+
+
+
+```{r}
+kh_temple_鳳山 <-  select(kh,c('distance_tem_鳳山_500','distance_tem_鳳山_1000','distance_tem_鳳山_2000'))
+```
+
+
+```{r}
+kh_temple_鳳山 <- kh_temple_鳳山 %>% 
+  summarise(
+               n_500 = sum( kh_temple_鳳山$distance_tem_鳳山_500 == 1),
+               n_1000 = sum( kh_temple_鳳山$distance_tem_鳳山_1000 == 1),
+               n_2000 = sum( kh_temple_鳳山$distance_tem_鳳山_2000 == 1)
+               
+           )
+kh_temple_鳳山= kh_temple_鳳山 %>% gather(key = 距離名稱, value = 數量, n_500:n_2000)
+```
+
+
+```{r}
+
+ggplot(data=kh_temple_鳳山)+
+  geom_bar(aes(x=距離名稱,y=數量, fill=數量),stat = 'identity')+
+  geom_text(aes(x=距離名稱, y=數量, label =數量),vjust=-0.3, size = 3) +
+  labs( x = "距離", y ="數量",title = "")+
+  theme(  strip.text = element_text(size = 22, color = "white",  
+                                    hjust = 0.5, family = "Heiti TC Light",face = "bold" ),
+         text = element_text(size = 16,color="black",family = "Heiti TC Light",face = "bold" ),
+         axis.title.x = element_text(family = "Heiti TC Light"),
+         axis.title.y = element_text(family = "Heiti TC Light"),
+         title = element_text(family = "Heiti TC Light"),
+       panel.background = element_rect( fill = "#efefef", color = NA ),
+       panel.grid.major.x = element_blank(),
+       panel.grid.minor.x = element_blank(),
+       panel.grid.minor.y = element_blank(),
+       panel.grid.major.y = element_line( color = "#b2b2b2"),
+       legend.position = "none")
+```
+
+
+
+

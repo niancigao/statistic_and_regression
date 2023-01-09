@@ -1,0 +1,211 @@
+---
+title: "Midterm report"
+author: "Group 12"
+date: "2022-11-01"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## 安裝套件
+```{r}
+pacman::p_load(data.table, dplyr, tidyr, stringr, ggplot2, plotly, lubridate, vcd, gridExtra,
+               car, readr, sf, tmap, highcharter, RColorBrewer, magrittr, knitr, fastDummies, 
+               psych, tidyverse, viridis, geosphere, MatchIt, stargazer, cobalt, eatATA, quantreg)
+library("MatchIt","stargazer")
+library("quantreg")
+library("eatATA")
+library(caret)
+library(corrplot)
+library(readxl)
+library(readr)
+library(data.table)
+library(dplyr)
+library(geosphere)
+pals17 = c(brewer.pal(9,"GnBu"), rev(brewer.pal(8,"YlGnBu")),rev(brewer.pal(9,"PuBu")))
+```
+
+## 載入資料
+```{r}
+KH <- read_csv("Dataset/KH_housing_data.csv") #高雄房屋交易資料
+temple <- read_csv("Dataset/高雄市寺廟基本資料.csv")
+```
+
+## 資料概述
+```{r}
+str(KH)
+str(temple)
+```
+
+
+## 刪除多餘變數
+```{r}
+KH <- subset(KH , 
+               select = -c(51:114))
+KH <- data.table(KH)
+```
+
+## 提取房屋、寺廟座標
+```{r}
+KH_location <- data.frame(X = KH$X, Y = KH$Y)
+tp_location_chr <- data.frame(X = temple$Longitude, Y = temple$Latitude)
+tp_location <- as.data.frame(lapply(tp_location_chr, as.numeric))
+```
+
+## 計算房屋和寺廟的最小距離並新增變數temple_distant
+```{r}
+temple_distant <- c()
+dis <- function(x){
+
+  return(min(distHaversine(x,tp_location[,])))
+}
+temple_distant<- apply(KH_location,1,dis)
+KH$temple_distant <- temple_distant
+summary(KH$temple_distant)
+```
+
+## 計算高雄區內寺廟密度 Step1: 載入和篩出需要資料
+```{r}
+Land_area = fread("Dataset/population_density.csv", header = T)
+str(Land_area)
+str(temple)
+Land_area = Land_area[,c(2,4)]
+temple = temple[,c(5)]
+```
+
+
+## 計算高雄區內寺廟密度 Step3: 計算高雄各區面積、寺廟數量
+```{r}
+KH_Land = subset(Land_area[grepl("高雄市" , site_id),])
+KH_ID_area = gsub('高雄市', '', KH_Land$site_id)
+KH_ID_area = data.frame(KH_ID_area)
+KH_area = cbind(KH_ID_area, KH_Land$area)
+
+temple_num = temple %>% group_by(場所區域) %>% summarise(coun = n())
+```
+
+## 計算高雄區內寺廟密度 Step4: 得出高雄各區寺廟密度
+```{r}
+density = merge(KH_area, temple_num, by.x = "KH_ID_area", by.y = "場所區域")
+temple_density = density %>% transmute(density[,1], "各區寺廟密度" = (density[,3]/as.numeric(density[,2])))
+temple_density %>%  arrange(desc(各區寺廟密度)) %>% head()
+```
+## 檢查並刪除高雄房屋有NA值資料
+```{r}
+sum(is.na(KH)) #4029
+KH <- na.omit(KH)
+```
+
+## 單變量分析
+```{r}
+summary(KH)
+```
+
+## 計算高雄各行政區「交易數量」
+```{r}
+trade_number <- KH %>% group_by(Location_Town) %>% 
+  summarise(
+    number_of_trade = n()
+  ) %>% arrange(desc(number_of_trade))
+
+trade_number
+```
+
+## 繪製高雄各行政區「交易數量」
+```{r fig.height=6, fig.width=10}
+ggplot(data = trade_number)+
+  geom_bar(aes(x = Location_Town, y = number_of_trade, fill = Location_Town), stat = 'identity')+
+  geom_text(aes(x = Location_Town, y = number_of_trade, label = number_of_trade), vjust = -0.3, size = 5) +
+  labs( x = "行政區", y = "交易量", title = "行政區交易量")+
+  theme(strip.text = 
+          element_text( size = 22, color = "white",  
+                                    hjust = 0.5, family = "Heiti TC Light",face = "bold", ),
+          axis.text.x = element_text(angle = 45), # x軸呈現45度
+         text = element_text(size = 20 ,color="black", family = "Heiti TC Light",face = "bold", ),
+         axis.title.x = element_text(family = "Heiti TC Light"),
+         axis.title.y = element_text(family = "Heiti TC Light"),
+         title = element_text(family = "Heiti TC Light"),
+       panel.background = element_rect( fill = "#efefef", color = NA ),
+       panel.grid.major.x = element_blank(),
+       panel.grid.minor.x = element_blank(),
+       panel.grid.minor.y = element_blank(),
+       panel.grid.major.y = element_line( color = "#b2b2b2"),
+       legend.position = "none")
+```
+
+### 計算行政區交易價格(中位數)
+```{r}
+trade_price <- KH %>% group_by(Location_Town) %>% 
+  summarise(trade_price = median(Price_total))
+```
+
+### 繪製行政區交易價格(中位數)
+```{r fig.height=6, fig.width=10}
+ggplot(data = trade_price)+
+  geom_bar(aes(x = Location_Town,y = trade_price, fill = Location_Town), stat = 'identity')+
+  geom_text(aes(x = Location_Town, y = trade_price, label = trade_price), vjust=-0.3, size = 5) +
+  labs( x = "行政區", y = "價格（萬元）",title = "行政區價格（中位數）")+
+  theme(  strip.text = element_text(size = 22, color = "white",  
+                                    hjust = 0.5, family = "Heiti TC Light",face = "bold" ),
+        axis.text.x = element_text(angle = 45), # x軸呈現45度
+         text = element_text(size = 20 ,color="black",family = "Heiti TC Light",face = "bold" ),
+         axis.title.x = element_text(family = "Heiti TC Light"),
+         axis.title.y = element_text(family = "Heiti TC Light"),
+         title = element_text(family = "Heiti TC Light"),
+       panel.background = element_rect( fill = "#efefef", color = NA ),
+       panel.grid.major.x = element_blank(),
+       panel.grid.minor.x = element_blank(),
+       panel.grid.minor.y = element_blank(),
+       panel.grid.major.y = element_line( color = "#b2b2b2"),
+       legend.position = "none")
+```
+
+## 查看廟宇距離
+```{r}
+summary(KH$temple_distant)
+```
+
+## 建物類型Building_Apt-general:公寓
+Building_Apt-WS:華夏
+Building_Apt-luxury:大樓
+Building_House:透天
+Building_Suit:套房
+```{r}
+type_Yancheng <- KH %>% summarise(
+  公寓 = sum(KH$Building_Apt.general== 1 & KH$Location_Town =='鹽埕區'),
+  華夏 = sum(KH$Building_Apt.WS == 1 & KH$Location_Town =='鹽埕區'),
+  大樓 = sum(KH$Building_Apt.luxury== 1 & KH$Location_Town =='鹽埕區'),
+  透天 = sum(KH$Building_House== 1 & KH$Location_Town =='鹽埕區'),
+  套房 = sum(KH$Building_Suit== 1 & KH$Location_Town =='鹽埕區')
+)
+type_Yancheng
+type_Yancheng = type_Yancheng %>% gather(key = 建物類型, value = 數量, 公寓:套房)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
